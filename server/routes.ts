@@ -1307,9 +1307,10 @@ export function createApiRouter(deps: {
   }));
 
   router.post('/cloud/free-models', asyncRoute(async (_req, res) => {
-    const settings = db.getSettings();
-    const apiKey = settings.cloudApiKey?.trim();
-    const baseUrl = settings.cloudProviderUrl?.trim() || 'https://openrouter.ai/api/v1';
+    const rows = db.connection.prepare("SELECT key, value FROM settings").all() as Array<{ key: string; value: string }>;
+    const stored = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+    const apiKey = stored.cloudApiKey?.trim();
+    const baseUrl = stored.cloudProviderUrl?.trim() || 'https://openrouter.ai/api/v1';
     if (!apiKey) {
       throw new HttpError(400, 'MISSING_API_KEY', 'Set the cloud provider API key in Settings first.');
     }
