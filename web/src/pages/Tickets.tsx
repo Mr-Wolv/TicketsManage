@@ -330,10 +330,10 @@ export function TicketsPage() {
                     <td className="num">{ticket.assessment ? formatPoints(ticket.assessment.basePoints) : '—'}</td>
                     <td>
                       {ticket.assessment ? (
-                        <div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <StatusBadge value={ticket.assessment.creditStatus} />
                           {ticket.assessment.creditStaffName ? (
-                            <div className="cell-sub">{ticket.assessment.creditStaffName}</div>
+                            <span className="cell-sub">{ticket.assessment.creditStaffName}</span>
                           ) : null}
                         </div>
                       ) : (

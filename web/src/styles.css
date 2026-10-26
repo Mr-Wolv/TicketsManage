@@ -1052,7 +1052,7 @@ pre {
 .data-table td {
   padding: 8px;
   border-bottom: 1px solid #edf0f5;
-  vertical-align: top;
+  vertical-align: middle;
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
