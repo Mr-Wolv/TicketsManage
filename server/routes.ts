@@ -1314,8 +1314,8 @@ export function createApiRouter(deps: {
     if (!apiKey) {
       throw new HttpError(400, 'MISSING_API_KEY', 'Set the cloud provider API key in Settings first.');
     }
-    const url = new URL('/v1/models', baseUrl);
-    const response = await fetch(url.toString(), {
+    const url = `${baseUrl.replace(/\/$/, '')}/models`;
+    const response = await fetch(url, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!response.ok) {
