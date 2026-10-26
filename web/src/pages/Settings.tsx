@@ -43,6 +43,8 @@ export function SettingsPage() {
   const [approvedReasons, setApprovedReasons] = useState<ApprovedReason[]>([]);
   const [auditLog, setAuditLog] = useState<TaxonomyAuditEntry[]>([]);
   const [taxonomyLoadError, setTaxonomyLoadError] = useState<string | null>(null);
+  const [cloudFreeModels, setCloudFreeModels] = useState<string[]>([]);
+  const [cloudModelError, setCloudModelError] = useState<string | null>(null);
   const [customForm, setCustomForm] = useState({
     id: '', code: '', label: '', labelAr: '', description: '', points: 2, distinction: '', examples: '', negativeExamples: '',
   });
@@ -523,7 +525,7 @@ export function SettingsPage() {
 
       <SectionCard
         title="Cloud semantic provider (optional)"
-        description="Use a free OpenAI-compatible provider for optional AI-assisted classification. Your API key is stored locally and never sent anywhere except the provider you choose."
+        description="Use an OpenAI-compatible provider for optional AI-assisted classification. Your API key is stored locally and never sent anywhere except the provider you choose."
       >
         <div className="stack">
           <div className="form-grid">
@@ -531,20 +533,10 @@ export function SettingsPage() {
               <span className="field-label">Provider</span>
               <select
                 className="input"
-                value={
-                  form.cloudProviderUrl === 'https://openrouter.ai/api/v1' &&
-                  form.cloudModel === 'meta-llama/llama-3.1-8b-instruct:free'
-                    ? 'openrouter-free'
-                    : form.cloudProviderUrl
-                      ? 'custom'
-                      : 'none'
-                }
+                value={form.cloudProviderUrl ? 'custom' : 'none'}
                 onChange={(event) => {
                   const value = event.target.value;
-                  if (value === 'openrouter-free') {
-                    update('cloudProviderUrl', 'https://openrouter.ai/api/v1');
-                    update('cloudModel', 'meta-llama/llama-3.1-8b-instruct:free');
-                  } else if (value === 'custom') {
+                  if (value === 'custom') {
                     update('cloudProviderUrl', '');
                     update('cloudModel', '');
                   } else {
@@ -555,11 +547,10 @@ export function SettingsPage() {
                 }}
               >
                 <option value="none">None (deterministic only)</option>
-                <option value="openrouter-free">OpenRouter free tier (recommended)</option>
                 <option value="custom">Custom OpenAI-compatible endpoint</option>
               </select>
               <span className="field-hint">
-                OpenRouter offers free hosted models. If you select it, enter your OpenRouter API key below. For custom providers, set the base URL, model ID, and key.
+                Pick a provider below, then enter its base URL, model ID, and API key. For OpenRouter, use the free-model selector to choose a currently free model.
               </span>
             </label>
             {form.cloudProviderUrl ? (
@@ -579,7 +570,7 @@ export function SettingsPage() {
                     className="input"
                     value={form.cloudModel}
                     onChange={(event) => update('cloudModel', event.target.value)}
-                    placeholder="meta-llama/llama-3.1-8b-instruct:free"
+                    placeholder="e.g. meta-llama/llama-3.1-8b-instruct"
                   />
                 </label>
                 <label className="field field-wide">
@@ -605,6 +596,65 @@ export function SettingsPage() {
                     onChange={(event) => update('cloudTimeoutMs', Number(event.target.value))}
                   />
                 </label>
+                <div className="inline-form">
+                  <button
+                    className="button button-secondary"
+                    onClick={async () => {
+                      setBusy('cloud-models');
+                      setCloudModelError(null);
+                      try {
+                        const response = await fetch('https://openrouter.ai/api/v1/models', {
+                          headers: { Authorization: `Bearer ${form.cloudApiKey}` },
+                        });
+                        if (!response.ok) throw new Error(`OpenRouter responded ${response.status}`);
+                        const payload = (await response.json()) as Record<string, unknown>;
+                        const models = Array.isArray((payload.data as Array<Record<string, unknown>>) ?? [])
+                          ? (payload.data as Array<Record<string, unknown>>)
+                          : [];
+                        const free = models
+                          .filter((model) => {
+                            const pricing = model.pricing as Record<string, string> | undefined;
+                            return (
+                              pricing?.prompt === '0' &&
+                              pricing?.completion === '0' &&
+                              typeof model.id === 'string'
+                            );
+                          })
+                          .map((model) => String(model.id));
+                        setCloudFreeModels(free);
+                        if (free.length === 0) {
+                          setCloudModelError('No free models found in the current OpenRouter roster.');
+                        }
+                      } catch (error) {
+                        setCloudModelError(error instanceof Error ? error.message : 'Could not load free models.');
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                    disabled={busy !== null || !form.cloudApiKey}
+                  >
+                    {busy === 'cloud-models' ? 'Checking…' : 'Check OpenRouter free models'}
+                  </button>
+                  {cloudFreeModels.length > 0 ? (
+                    <select
+                      className="input"
+                      value={form.cloudModel}
+                      onChange={(event) => update('cloudModel', event.target.value)}
+                    >
+                      <option value="">Select free model…</option>
+                      {cloudFreeModels.map((modelId) => (
+                        <option key={modelId} value={modelId}>
+                          {modelId}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+                {cloudModelError ? (
+                  <p className="muted" style={{ color: '#b45309' }}>
+                    {cloudModelError}
+                  </p>
+                ) : null}
               </>
             ) : null}
           </div>
