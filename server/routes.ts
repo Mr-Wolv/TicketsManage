@@ -1302,6 +1302,37 @@ export function createApiRouter(deps: {
     res.json({ reason, result });
   }));
 
+  router.post('/cloud/free-models', asyncRoute(async (_req, res) => {
+    const settings = db.getSettings();
+    const apiKey = settings.cloudApiKey?.trim();
+    const baseUrl = settings.cloudProviderUrl?.trim() || 'https://openrouter.ai/api/v1';
+    if (!apiKey) {
+      throw new HttpError(400, 'MISSING_API_KEY', 'Set the cloud provider API key in Settings first.');
+    }
+    const url = new URL('/v1/models', baseUrl);
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+      throw new HttpError(502, 'UPSTREAM_ERROR', `OpenRouter responded ${response.status}`);
+    }
+    const payload = (await response.json()) as Record<string, unknown>;
+    const models = Array.isArray((payload.data as Array<Record<string, unknown>>) ?? [])
+      ? (payload.data as Array<Record<string, unknown>>)
+      : [];
+    const free = models
+      .filter((model) => {
+        const pricing = model.pricing as Record<string, string> | undefined;
+        return (
+          pricing?.prompt === '0' &&
+          pricing?.completion === '0' &&
+          typeof model.id === 'string'
+        );
+      })
+      .map((model) => String(model.id));
+    res.json({ models: free });
+  }));
+
   router.post('/ai/mode', asyncRoute(async (req, res) => {
     const body = (req.body as Record<string, unknown>) ?? {};
     const aiMode = body.aiMode;
