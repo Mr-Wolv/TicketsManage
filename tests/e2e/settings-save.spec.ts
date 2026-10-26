@@ -21,5 +21,9 @@ test.describe('Settings save flow', () => {
 
     await expect(saveButton).toBeEnabled({ timeout: 15000 });
     await expect(ollamaInput).toHaveValue(testValue);
+
+    await ollamaInput.fill(originalValue ?? 'http://127.0.0.1:11434');
+    await saveButton.click();
+    await expect(saveButton).toBeEnabled({ timeout: 15000 });
   });
 });
