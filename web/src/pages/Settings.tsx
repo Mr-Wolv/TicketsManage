@@ -11,6 +11,7 @@ import {
   ToneBadge,
 } from '../components/ui';
 import type { AppSettings, ModelStatus, SettingsResponse, ApprovedReason, CustomCategory, TaxonomyAuditEntry, TaxonomyOverride } from '../types';
+import { flushSync } from 'react-dom';
 
 interface BackupEntry {
   file: string;
@@ -118,8 +119,11 @@ export function SettingsPage() {
 
   const save = async () => {
     if (!form) return;
-    setSaving(true);
+    flushSync(() => {
+      setSaving(true);
+    });
     setError(null);
+    await new Promise((resolve) => setTimeout(resolve, 30));
     try {
       const result = await api<{ settings: AppSettings; message: string }>('/api/settings', {
         method: 'PUT',

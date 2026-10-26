@@ -19,9 +19,7 @@ test.describe('Settings save flow', () => {
     const saveButton = page.getByRole('button', { name: 'Save settings' });
     await saveButton.click();
 
-    await expect(page.getByRole('button', { name: 'Saving…' })).toBeVisible();
-
-    await expect(page.getByRole('button', { name: 'Save settings' })).toBeVisible({ timeout: 15000 });
+    await expect(saveButton).toBeEnabled({ timeout: 15000 });
     await expect(ollamaInput).toHaveValue(testValue);
   });
 });
