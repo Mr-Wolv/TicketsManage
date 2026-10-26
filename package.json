@@ -13,6 +13,7 @@
     "start": "tsx server/index.ts",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "eval:model": "tsx scripts/evaluate-model.ts"
   },
