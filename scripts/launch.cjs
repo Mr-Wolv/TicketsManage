@@ -164,32 +164,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Check preferred port first
-  const preferred = await probe(PREFERRED_PORT, 1000);
-  if (preferred.inUse && preferred.isTicketsManage) {
-    console.log(
-      `Reusing existing TicketsManage instance at http://127.0.0.1:${PREFERRED_PORT}`,
-    );
-    openUrl(`http://127.0.0.1:${PREFERRED_PORT}`);
-    return;
-  }
-
-  const startPort = preferred.inUse ? PREFERRED_PORT + 1 : PREFERRED_PORT;
+  const startPort = PREFERRED_PORT;
 
   for (let port = startPort; port <= PORT_SEARCH_END; port++) {
-    if (port !== PREFERRED_PORT) {
-      const existing = await probe(port, 300);
-      if (existing.inUse && existing.isTicketsManage) {
-        console.log(
-          `Reusing existing TicketsManage instance at http://127.0.0.1:${port}`,
-        );
-        openUrl(`http://127.0.0.1:${port}`);
-        return;
-      }
-      if (existing.inUse) {
-        console.log(`Port ${port} is occupied by another application. Skipping...`);
-        continue;
-      }
+    const existing = await probe(port, 300);
+    if (existing.inUse) {
+      console.log(`Port ${port} is occupied by another application. Skipping...`);
+      continue;
     }
 
     console.log(`Starting TicketsManage on port ${port}...`);
