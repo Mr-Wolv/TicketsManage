@@ -1038,6 +1038,10 @@ export function createApiRouter(deps: {
         'maxRetries',
         'navigationTimeoutMs',
         'fetchConcurrency',
+        'cloudProviderUrl',
+        'cloudApiKey',
+        'cloudModel',
+        'cloudTimeoutMs',
       ];
       const patch: Partial<AppSettings> = {};
       for (const key of allowed) {
