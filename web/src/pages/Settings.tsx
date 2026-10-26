@@ -69,7 +69,7 @@ export function SettingsPage() {
     }
   }, []);
 
-  const loadTaxonomy = async () => {
+  const loadTaxonomy = useCallback(async () => {
     setBusy('taxonomy');
     setTaxonomyLoadError(null);
     try {
@@ -98,7 +98,7 @@ export function SettingsPage() {
     } finally {
       setBusy(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
