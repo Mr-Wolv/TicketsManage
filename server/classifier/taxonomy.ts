@@ -214,6 +214,8 @@ export function pointsFor(categoryId: CategoryId, db?: Db): number {
   if (db) {
     const override = db.getCategoryPoints(categoryId);
     if (override !== null) return override;
+    const unified = loadUnifiedTaxonomy(db);
+    if (unified[categoryId]) return unified[categoryId]!.points;
   }
   return TAXONOMY_BY_ID[categoryId]!.points;
 }
@@ -236,6 +238,14 @@ export function loadCustomCategories(db: Db): Record<string, TaxonomyCategory> {
     };
   }
   return result;
+}
+
+export function getUnifiedCategory(db: Db | undefined, categoryId: CategoryId): TaxonomyCategory | undefined {
+  if (db) {
+    const unified = loadUnifiedTaxonomy(db);
+    if (unified[categoryId]) return unified[categoryId];
+  }
+  return TAXONOMY_BY_ID[categoryId];
 }
 
 export function loadUnifiedTaxonomy(db: Db): Record<string, TaxonomyCategory> {

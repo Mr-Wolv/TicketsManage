@@ -1,6 +1,6 @@
 import type { Db, TicketListFilters } from './db.js';
 import type { CategoryId, TicketRecord } from './types.js';
-import { TAXONOMY_BY_ID } from './classifier/taxonomy.js';
+import { getUnifiedCategory } from './classifier/taxonomy.js';
 
 export interface StaffReportFilters {
   from?: string;
@@ -181,7 +181,7 @@ export function buildStaffReport(db: Db, filters: StaffReportFilters): StaffRepo
           const share = (category.points / assessment.basePoints) * awarded;
           let breakdown = row.categories.find((item) => item.categoryId === category.categoryId);
           if (!breakdown) {
-            const definition = TAXONOMY_BY_ID[category.categoryId]!;
+            const definition = getUnifiedCategory(db, category.categoryId)!;
             breakdown = {
               categoryId: category.categoryId,
               code: definition.code,

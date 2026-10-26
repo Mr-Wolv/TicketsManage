@@ -7,7 +7,7 @@ import type {
   ReasonState,
 } from '../types.js';
 import type { Db } from '../db.js';
-import { FALLBACK_DISPLAY_LABEL, TAXONOMY_BY_ID, findApprovedReason, loadCustomCategories, pointsFor } from './taxonomy.js';
+import { FALLBACK_DISPLAY_LABEL, findApprovedReason, getUnifiedCategory, loadUnifiedTaxonomy, pointsFor } from './taxonomy.js';
 import { classifyRules, type RuleMatch } from './rules.js';
 import { editSimilarity, normalizeReason } from './normalize.js';
 import type { SemanticClassification } from './ollama.js';
@@ -145,9 +145,7 @@ export async function classifyReason(
       fallbackDisplayLabel: null,
       method: 'approved_alias',
       confidence: 0.99,
-      explanation: `An approved manager correction for this exact wording was reused: ${categories
-        .map((category) => TAXONOMY_BY_ID[category.categoryId]!.code)
-        .join(', ')}.`,
+      explanation: `An approved manager correction for this exact wording was reused: ${getUnifiedCategory(options.db, categories[0]!.categoryId)!.code}.`,
       alternatives: [],
       reviewRequired: false,
       reviewReasons: [],
@@ -177,7 +175,7 @@ export async function classifyReason(
       fallbackDisplayLabel: null,
       method: 'approved_reason' as ClassificationMethod,
       confidence: 0.85,
-      explanation: `An approved manager correction with similar wording was reused: ${TAXONOMY_BY_ID[approvedReason.categoryId]!.code}.`,
+      explanation: `An approved manager correction with similar wording was reused: ${getUnifiedCategory(options.db, approvedReason.categoryId)!.code}.`,
       alternatives: [],
       reviewRequired: false,
       reviewReasons: [],
@@ -233,8 +231,9 @@ export async function classifyReason(
   }
 
   if (options.db) {
-    const customCategories = loadCustomCategories(options.db);
-    for (const custom of Object.values(customCategories)) {
+    const unifiedCategories = loadUnifiedTaxonomy(options.db);
+    const customCategories = Object.values(unifiedCategories).filter((category) => category.isCustom);
+    for (const custom of customCategories) {
       for (const example of custom.examples) {
         const similarity = editSimilarity(normalized, normalizeReason(example));
         if (similarity >= 0.8) {
@@ -427,8 +426,8 @@ export async function classifyReason(
   }
 
   const selectedLabels = categories.map((category) => {
-    const definition = TAXONOMY_BY_ID[category.categoryId]!;
-    return `${definition.code} (${category.points} points)`;
+    const definition = getUnifiedCategory(options.db, category.categoryId);
+    return `${definition!.code} (${category.points} points)`;
   });
   const evidenceSummary = categories
     .flatMap((category) => category.evidence.map((evidence) => `${category.categoryId}: ${evidence}`))

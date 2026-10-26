@@ -302,30 +302,25 @@ export function createApiRouter(deps: {
 
   router.get('/taxonomy', (_req, res) => {
     const overrides = db.listTaxonomyOverrides();
-    const customCategories = db.listCustomCategories();
-    const categories = TAXONOMY.map((category) => {
-      const override = overrides.find((o) => o.categoryId === category.id);
-      return {
-        ...category,
-        points: override ? override.points : category.points,
-        isCustom: false,
-      };
-    });
-    for (const custom of customCategories) {
-      categories.push({
-        id: custom.id,
-        code: custom.code,
-        label: custom.label,
-        labelAr: custom.labelAr,
-        description: custom.description,
-        points: custom.points,
-        distinction: custom.distinction || undefined,
-        examples: custom.examples,
-        negativeExamples: custom.negativeExamples.length > 0 ? custom.negativeExamples : undefined,
-        isCustom: true,
-      });
-    }
+    const unifiedRows = db.loadUnifiedTaxonomy();
+    const categories = Object.values(unifiedRows).map((row) => ({
+      id: row.id,
+      code: row.code,
+      label: row.label,
+      labelAr: row.labelAr,
+      description: row.description,
+      points: overrides.find((o) => o.categoryId === row.id)?.points ?? row.points,
+      distinction: row.distinction || undefined,
+      examples: row.examples,
+      negativeExamples: row.negativeExamples.length > 0 ? row.negativeExamples : undefined,
+      isCustom: !row.isFixed,
+    }));
     res.json({ version: TAXONOMY_VERSION, categories, overrides });
+  });
+
+  router.get('/taxonomy/categories', (_req, res) => {
+    const rows = db.loadUnifiedTaxonomy();
+    res.json({ categories: Object.values(rows) });
   });
 
   router.get('/taxonomy/overrides', (_req, res) => {

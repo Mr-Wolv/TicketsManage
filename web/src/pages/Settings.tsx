@@ -521,6 +521,96 @@ export function SettingsPage() {
         </div>
       </SectionCard>
 
+      <SectionCard
+        title="Cloud semantic provider (optional)"
+        description="Use a free OpenAI-compatible provider for optional AI-assisted classification. Your API key is stored locally and never sent anywhere except the provider you choose."
+      >
+        <div className="stack">
+          <div className="form-grid">
+            <label className="field field-wide">
+              <span className="field-label">Provider</span>
+              <select
+                className="input"
+                value={
+                  form.cloudProviderUrl === 'https://openrouter.ai/api/v1' &&
+                  form.cloudModel === 'meta-llama/llama-3.1-8b-instruct:free'
+                    ? 'openrouter-free'
+                    : form.cloudProviderUrl
+                      ? 'custom'
+                      : 'none'
+                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === 'openrouter-free') {
+                    update('cloudProviderUrl', 'https://openrouter.ai/api/v1');
+                    update('cloudModel', 'meta-llama/llama-3.1-8b-instruct:free');
+                  } else if (value === 'custom') {
+                    update('cloudProviderUrl', '');
+                    update('cloudModel', '');
+                  } else {
+                    update('cloudProviderUrl', '');
+                    update('cloudModel', '');
+                    update('cloudApiKey', '');
+                  }
+                }}
+              >
+                <option value="none">None (deterministic only)</option>
+                <option value="openrouter-free">OpenRouter free tier (recommended)</option>
+                <option value="custom">Custom OpenAI-compatible endpoint</option>
+              </select>
+              <span className="field-hint">
+                OpenRouter offers free hosted models. If you select it, enter your OpenRouter API key below. For custom providers, set the base URL, model ID, and key.
+              </span>
+            </label>
+            {form.cloudProviderUrl ? (
+              <>
+                <label className="field field-wide">
+                  <span className="field-label">Provider base URL</span>
+                  <input
+                    className="input"
+                    value={form.cloudProviderUrl}
+                    onChange={(event) => update('cloudProviderUrl', event.target.value)}
+                    placeholder="https://openrouter.ai/api/v1"
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span className="field-label">Model ID</span>
+                  <input
+                    className="input"
+                    value={form.cloudModel}
+                    onChange={(event) => update('cloudModel', event.target.value)}
+                    placeholder="meta-llama/llama-3.1-8b-instruct:free"
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span className="field-label">API key</span>
+                  <input
+                    className="input"
+                    type="password"
+                    value={form.cloudApiKey}
+                    onChange={(event) => update('cloudApiKey', event.target.value)}
+                    placeholder="sk-or-..."
+                  />
+                  <span className="field-hint">Stored in local settings only.</span>
+                </label>
+                <label className="field field-wide">
+                  <span className="field-label">Timeout (ms)</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1000}
+                    max={300000}
+                    step={1000}
+                    value={form.cloudTimeoutMs}
+                    onChange={(event) => update('cloudTimeoutMs', Number(event.target.value))}
+                  />
+                </label>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Classification and collection behaviour">
         <div className="form-grid">
           <label className="check-row field-wide">
