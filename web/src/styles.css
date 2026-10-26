@@ -481,8 +481,20 @@ ol {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
+}
+
+@media (max-width: 1200px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .metric-card {
@@ -503,9 +515,11 @@ ol {
   text-transform: uppercase;
   letter-spacing: 0.045em;
   font-weight: 600;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
 }
 
 .metric-value {
@@ -1005,9 +1019,10 @@ pre {
 /* Tables ----------------------------------------------------------------- */
 
 .table-wrap {
-  overflow-x: auto;
+  overflow: auto;
   border: 1px solid var(--border);
   border-radius: 9px;
+  max-height: 70vh;
 }
 
 .data-table {
@@ -1015,6 +1030,7 @@ pre {
   border-collapse: collapse;
   font-size: 12px;
   min-width: 900px;
+  table-layout: auto;
 }
 
 .data-table th {
@@ -1025,7 +1041,7 @@ pre {
   text-transform: uppercase;
   letter-spacing: 0.055em;
   font-weight: 700;
-  padding: 9px 10px;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   position: sticky;
@@ -1034,10 +1050,13 @@ pre {
 }
 
 .data-table td {
-  padding: 9px 10px;
+  padding: 8px;
   border-bottom: 1px solid #edf0f5;
   vertical-align: top;
-  max-width: 280px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .data-table tbody tr:last-child td {

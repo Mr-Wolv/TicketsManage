@@ -110,7 +110,7 @@ export function StaffPage() {
               {normalize ? 'Normalized view' : 'Normalize points'}
             </button>
             <button
-              className="button button-secondary"
+              className="button button-ghost"
               onClick={() => void maintenance('rescore')}
               disabled={busy !== null}
               title="Recalculate awards from stored categories. No dashboard or classifier work."

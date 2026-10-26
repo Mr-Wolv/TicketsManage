@@ -1339,13 +1339,6 @@ export function SettingsPage() {
           <li>Report totals are decision support, not automatic disciplinary decisions.</li>
         </ul>
       </SectionCard>
-
-      <div className="save-bar">
-        <span>Settings are stored in the local SQLite database.</span>
-        <button className="button button-primary" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Save settings'}
-        </button>
-      </div>
     </div>
   );
 }
