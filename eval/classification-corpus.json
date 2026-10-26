@@ -1,0 +1,440 @@
+{
+  "version": "1.0.0",
+  "description": "Labeled closing-reason corpus for TicketsManage. Arabic, Egyptian Arabic, Arabizi and English, including multi-label reasons, negations and deliberate distractors. expectedCategories is the authoritative label set; an empty array means no scored category is correct (the application fallback is recorded separately).",
+  "rows": [
+    {
+      "id": "rech-01",
+      "language": "ar",
+      "reason": "تم شحن الحساب للاعب",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge, Modern Standard Arabic"
+    },
+    {
+      "id": "rech-02",
+      "language": "ar",
+      "reason": "شحنت اللعبة للاعب وتم الشحن",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge, Egyptian Arabic with ta-marbuta"
+    },
+    {
+      "id": "rech-03",
+      "language": "ar",
+      "reason": "الشحن تم بنجاح",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge, inverted phrasing"
+    },
+    {
+      "id": "rech-04",
+      "language": "arabizi",
+      "reason": "tm el shahn lel 7sab",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge in Arabizi"
+    },
+    {
+      "id": "rech-05",
+      "language": "arabizi",
+      "reason": "shahnet el 7sab",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge in Arabizi"
+    },
+    {
+      "id": "rech-06",
+      "language": "en",
+      "reason": "Recharge completed for the player",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge, English"
+    },
+    {
+      "id": "rech-07",
+      "language": "en",
+      "reason": "Player top-up completed",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge, English with a hyphen"
+    },
+    {
+      "id": "rech-08",
+      "language": "en",
+      "reason": "account recharge",
+      "expectedCategories": ["RECHARGE"],
+      "note": "Recharge, bare phrase"
+    },
+    {
+      "id": "rech-09",
+      "language": "en",
+      "reason": "Player asked how to recharge",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Question about recharging: General Question, not Recharge"
+    },
+    {
+      "id": "rech-10",
+      "language": "ar",
+      "reason": "اللاعب سأل إزاي يشحن",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Egyptian Arabic question about recharging: General Question, not Recharge"
+    },
+    {
+      "id": "rech-11",
+      "language": "ar",
+      "reason": "تم شحن الحساب وتم حل المشكلة عن طريق الشات",
+      "expectedCategories": ["RECHARGE", "TEXT_PROBLEM_SOLVED"],
+      "note": "Two distinct purposes in one reason"
+    },
+    {
+      "id": "rech-12",
+      "language": "en",
+      "reason": "player got 500 credit top up and issue solved in chat",
+      "expectedCategories": ["RECHARGE", "TEXT_PROBLEM_SOLVED"],
+      "note": "Two distinct purposes, English"
+    },
+    {
+      "id": "rep-01",
+      "language": "en",
+      "reason": "Player kept insulting other players in chat, reported for abuse.",
+      "expectedCategories": ["REPORT"],
+      "note": "Abuse report"
+    },
+    {
+      "id": "rep-02",
+      "language": "ar",
+      "reason": "بلاغ عن لاعب بيشتم الناس",
+      "expectedCategories": ["REPORT"],
+      "note": "Abuse report, Egyptian Arabic"
+    },
+    {
+      "id": "rep-03",
+      "language": "ar",
+      "reason": "اللاعب سبني وشتمني في الشات",
+      "expectedCategories": ["REPORT"],
+      "note": "Abuse report with first-person wording"
+    },
+    {
+      "id": "rep-04",
+      "language": "en",
+      "reason": "report for toxic behaviour and harassment",
+      "expectedCategories": ["REPORT"],
+      "note": "Abuse report with two synonyms"
+    },
+    {
+      "id": "rep-05",
+      "language": "arabizi",
+      "reason": "shtama wa sabb fel chat",
+      "expectedCategories": ["REPORT"],
+      "note": "Abuse report in Arabizi"
+    },
+    {
+      "id": "iss-01",
+      "language": "en",
+      "reason": "General issue affecting all players on the server",
+      "expectedCategories": ["GENERAL_ISSUE"],
+      "note": "Genuinely server-wide problem"
+    },
+    {
+      "id": "iss-02",
+      "language": "ar",
+      "reason": "مشكلة عامة في السيرفر بتأثر على كل اللاعبين",
+      "expectedCategories": ["GENERAL_ISSUE"],
+      "note": "Server-wide problem, Egyptian Arabic"
+    },
+    {
+      "id": "iss-03",
+      "language": "en",
+      "reason": "server-wide bug for everyone",
+      "expectedCategories": ["GENERAL_ISSUE"],
+      "note": "Server-wide problem, English"
+    },
+    {
+      "id": "iss-04",
+      "language": "arabizi",
+      "reason": "moshkela 3ama lel mo5dm",
+      "expectedCategories": ["GENERAL_ISSUE"],
+      "note": "Server-wide problem in Arabizi"
+    },
+    {
+      "id": "iss-05",
+      "language": "en",
+      "reason": "The game keeps crashing for this one player",
+      "expectedCategories": [],
+      "note": "Distractor: a single-player technical fault is not a general issue"
+    },
+    {
+      "id": "que-01",
+      "language": "ar",
+      "reason": "استفسار عن مواعيد الفعاليات",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Information request"
+    },
+    {
+      "id": "que-02",
+      "language": "en",
+      "reason": "Player asked how to join the server",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Information request, English"
+    },
+    {
+      "id": "que-03",
+      "language": "ar",
+      "reason": "سأل عن طريقة اللعب",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Information request, Egyptian Arabic"
+    },
+    {
+      "id": "que-04",
+      "language": "en",
+      "reason": "question about the rules",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Information request, bare phrase"
+    },
+    {
+      "id": "que-05",
+      "language": "arabizi",
+      "reason": "kan bes2al 3an el rules",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Information request in Arabizi"
+    },
+    {
+      "id": "que-06",
+      "language": "en",
+      "reason": "Player asked how to appeal a ban",
+      "expectedCategories": ["GENERAL_QUESTION"],
+      "note": "Distractor: a question about a ban is not an unban"
+    },
+    {
+      "id": "nr-01",
+      "language": "ar",
+      "reason": "اللاعب مردش ومفيش رد",
+      "expectedCategories": ["NO_RESPONSE"],
+      "note": "Player inactivity, Egyptian Arabic"
+    },
+    {
+      "id": "nr-02",
+      "language": "en",
+      "reason": "no response from the player after several hours",
+      "expectedCategories": ["NO_RESPONSE"],
+      "note": "Player inactivity, English"
+    },
+    {
+      "id": "nr-03",
+      "language": "ar",
+      "reason": "مافيش رد من اللاعب",
+      "expectedCategories": ["NO_RESPONSE"],
+      "note": "Player inactivity, Arabic"
+    },
+    {
+      "id": "nr-04",
+      "language": "en",
+      "reason": "closed for inactivity",
+      "expectedCategories": ["NO_RESPONSE"],
+      "note": "Player inactivity, official code"
+    },
+    {
+      "id": "nr-05",
+      "language": "arabizi",
+      "reason": "mafish rad mn el player",
+      "expectedCategories": ["NO_RESPONSE"],
+      "note": "Player inactivity in Arabizi"
+    },
+    {
+      "id": "nr-06",
+      "language": "en",
+      "reason": "Staff did not respond to the player",
+      "expectedCategories": [],
+      "note": "Distractor: staff failure is not player inactivity"
+    },
+    {
+      "id": "nr-07",
+      "language": "ar",
+      "reason": "الموظف مردش على اللاعب",
+      "expectedCategories": [],
+      "note": "Distractor: staff failure in Arabic"
+    },
+    {
+      "id": "unb-01",
+      "language": "ar",
+      "reason": "تم رفع الحظر بعد المراجعة",
+      "expectedCategories": ["UNBANNED"],
+      "note": "Ban lifted, Arabic"
+    },
+    {
+      "id": "unb-02",
+      "language": "en",
+      "reason": "Player was unbanned after anti-cheat review",
+      "expectedCategories": ["UNBANNED"],
+      "note": "Ban lifted, English"
+    },
+    {
+      "id": "unb-03",
+      "language": "ar",
+      "reason": "فك البان بعد مراجعة الانتي شيت",
+      "expectedCategories": ["UNBANNED"],
+      "note": "Ban lifted, Egyptian Arabic"
+    },
+    {
+      "id": "unb-04",
+      "language": "en",
+      "reason": "ban lifted after appeal",
+      "expectedCategories": ["UNBANNED"],
+      "note": "Ban lifted, English"
+    },
+    {
+      "id": "ad-01",
+      "language": "en",
+      "reason": "Fixed the driver issue through AnyDesk",
+      "expectedCategories": ["ANYDESK"],
+      "note": "AnyDesk resolution"
+    },
+    {
+      "id": "ad-02",
+      "language": "ar",
+      "reason": "حليت المشكلة عن طريق AnyDesk",
+      "expectedCategories": ["ANYDESK"],
+      "note": "AnyDesk resolution, Egyptian Arabic"
+    },
+    {
+      "id": "ad-03",
+      "language": "ar",
+      "reason": "دخلت أني ديسك وصلحت المشكلة",
+      "expectedCategories": ["ANYDESK"],
+      "note": "AnyDesk resolution, Arabic"
+    },
+    {
+      "id": "ad-04",
+      "language": "en",
+      "reason": "technical issue solved via AnyDesk remote session",
+      "expectedCategories": ["ANYDESK"],
+      "note": "AnyDesk remote session"
+    },
+    {
+      "id": "adb-01",
+      "language": "en",
+      "reason": "Issue resolved via AnyDesk by another staff member",
+      "expectedCategories": ["ANYDESK_BY"],
+      "note": "AnyDesk explicitly performed by another staff member"
+    },
+    {
+      "id": "adb-02",
+      "language": "ar",
+      "reason": "تم حل المشكلة عن طريق أني ديسك بواسطة أحد الموظفين",
+      "expectedCategories": ["ANYDESK_BY"],
+      "note": "AnyDesk attributed to staff in Arabic"
+    },
+    {
+      "id": "adb-03",
+      "language": "en",
+      "reason": "AnyDesk by support team",
+      "expectedCategories": ["ANYDESK_BY"],
+      "note": "AnyDesk attributed to support"
+    },
+    {
+      "id": "acc-01",
+      "language": "ar",
+      "reason": "استعادة الحساب بعد نسيان كلمة المرور",
+      "expectedCategories": ["ACCOUNT_RECOVERY"],
+      "note": "Account recovery, Arabic"
+    },
+    {
+      "id": "acc-02",
+      "language": "en",
+      "reason": "Recovered the player’s account after they forgot the password",
+      "expectedCategories": ["ACCOUNT_RECOVERY"],
+      "note": "Account recovery, English with a curly apostrophe"
+    },
+    {
+      "id": "acc-03",
+      "language": "ar",
+      "reason": "تم تغيير الباسورد واسترجاع الحساب",
+      "expectedCategories": ["ACCOUNT_RECOVERY"],
+      "note": "Password reset and recovery, Arabic"
+    },
+    {
+      "id": "acc-04",
+      "language": "en",
+      "reason": "account recovery and password reset",
+      "expectedCategories": ["ACCOUNT_RECOVERY"],
+      "note": "Account recovery and password reset, English"
+    },
+    {
+      "id": "acc-05",
+      "language": "arabizi",
+      "reason": "nset el password w 3mlna recovery",
+      "expectedCategories": ["ACCOUNT_RECOVERY"],
+      "note": "Account recovery in Arabizi"
+    },
+    {
+      "id": "txt-01",
+      "language": "ar",
+      "reason": "تم حل المشكلة عن طريق الشات",
+      "expectedCategories": ["TEXT_PROBLEM_SOLVED"],
+      "note": "Solved through chat, Arabic"
+    },
+    {
+      "id": "txt-02",
+      "language": "en",
+      "reason": "Problem solved through chatting with the player",
+      "expectedCategories": ["TEXT_PROBLEM_SOLVED"],
+      "note": "Solved through chat, English"
+    },
+    {
+      "id": "txt-03",
+      "language": "en",
+      "reason": "explained the fix in text and it worked",
+      "expectedCategories": ["TEXT_PROBLEM_SOLVED"],
+      "note": "Solved through written explanation"
+    },
+    {
+      "id": "txt-04",
+      "language": "arabizi",
+      "reason": "et7allet bel chat",
+      "expectedCategories": ["TEXT_PROBLEM_SOLVED"],
+      "note": "Solved through chat in Arabizi"
+    },
+    {
+      "id": "txt-05",
+      "language": "ar",
+      "reason": "المشكلة لسه موجودة",
+      "expectedCategories": [],
+      "note": "Distractor: problem remains unresolved"
+    },
+    {
+      "id": "txt-06",
+      "language": "en",
+      "reason": "Player never replied to the explanation",
+      "expectedCategories": ["NO_RESPONSE"],
+      "note": "Player inactivity, not solved"
+    },
+    {
+      "id": "fb-01",
+      "language": "en",
+      "reason": "Player wanted to change his username",
+      "expectedCategories": [],
+      "note": "No fixed category fits this request"
+    },
+    {
+      "id": "fb-02",
+      "language": "en",
+      "reason": "zxqv blorp wobble",
+      "expectedCategories": [],
+      "note": "Unintelligible wording; fallback must be visible"
+    },
+    {
+      "id": "fb-03",
+      "language": "ar",
+      "reason": "تقديم اداره",
+      "expectedCategories": [],
+      "note": "Foreign staff-application wording must fall back, never inherit a model guess"
+    },
+    {
+      "id": "mix-01",
+      "language": "en",
+      "reason": "Player insulted staff and was unbanned after appeal",
+      "expectedCategories": ["REPORT", "UNBANNED"],
+      "note": "Two distinct categories"
+    },
+    {
+      "id": "mix-02",
+      "language": "ar",
+      "reason": "تم رفع الحظر وتم شحن الحساب",
+      "expectedCategories": ["UNBANNED", "RECHARGE"],
+      "note": "Two distinct categories, Arabic"
+    }
+  ]
+}

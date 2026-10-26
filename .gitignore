@@ -1,0 +1,13 @@
+node_modules/
+dist/
+web-dist/
+data/
+output/
+.browser-profile*/
+legacy/
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
