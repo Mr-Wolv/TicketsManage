@@ -1,4 +1,5 @@
 import type { CategoryAssessment, ClassificationResult } from '../types.js';
+import type { CategoryId } from '../types.js';
 
 export interface CloudSemanticProvider {
   readonly name: string;
@@ -123,4 +124,23 @@ export class OpenAiCompatibleProvider implements CloudSemanticProvider {
       throw new CloudSemanticUnavailableError((error as Error)?.message ?? 'Unknown provider error');
     }
   }
+}
+
+export function adaptCloudResult(result: CloudSemanticResult): Record<string, unknown> {
+  return {
+    categories: result.categories.map((category) => ({
+      categoryId: category.id,
+      evidence: category.evidence,
+      confidence: category.confidence,
+    })),
+    alternatives: result.alternative_categories.map((category) => ({
+      categoryId: category.id,
+      reason: category.reason,
+    })),
+    unresolvedPortion: result.unresolved_portion,
+    reviewRequired: result.review_required,
+    explanation: result.explanation,
+    model: result.model,
+    latencyMs: result.latencyMs,
+  };
 }

@@ -619,7 +619,7 @@ export function SettingsPage() {
               checked={form.semanticEnabled}
               onChange={(event) => update('semanticEnabled', event.target.checked)}
             />
-            <span>Allow the local model self-test and offline evaluation (never used to score live tickets)</span>
+            <span>Allow AI-assisted classification (local or cloud). In production mode this affects live ticket scoring.</span>
           </label>
           <label className="check-row field-wide">
             <input

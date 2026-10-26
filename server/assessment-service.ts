@@ -3,9 +3,10 @@ import type { Db } from './db.js';
 import { log } from './logger.js';
 import { normalizeReason } from './classifier/normalize.js';
 import { classifyReason } from './classifier/pipeline.js';
-import { isCategoryId, pointsFor } from './classifier/taxonomy.js';
+import { isCategoryId, loadUnifiedTaxonomy, pointsFor } from './classifier/taxonomy.js';
 import { applyStaffCredit, basePointsFor } from './scoring.js';
 import { OllamaClient } from './classifier/ollama.js';
+import { OpenAiCompatibleProvider, adaptCloudResult, buildTaxonomyContext } from './classifier/cloud.js';
 import type {
   CategoryAssessment,
   CategoryId,
@@ -101,8 +102,24 @@ export class AssessmentService {
     let semanticFn: ((reason: string) => Promise<any>) | undefined;
     if (useModel || useShadow) {
       try {
-        const client = new OllamaClient(settings.ollamaUrl, settings.model);
-        semanticFn = (reason: string) => client.classifyReason(reason, settings.modelTimeoutMs);
+        if (settings.cloudProviderUrl && settings.cloudApiKey && settings.cloudModel) {
+          const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
+          const taxonomyContext = buildTaxonomyContext(
+            Object.values(loadUnifiedTaxonomy(this.db)).map((category) => ({
+              id: category.id,
+              code: category.code,
+              label: category.label,
+              examples: category.examples,
+            })),
+          );
+          semanticFn = async (reason: string) => {
+            const result = await provider.classify(reason, taxonomyContext, settings.cloudTimeoutMs);
+            return adaptCloudResult(result) as any;
+          };
+        } else {
+          const client = new OllamaClient(settings.ollamaUrl, settings.model);
+          semanticFn = (reason: string) => client.classifyReason(reason, settings.modelTimeoutMs);
+        }
       } catch (error) {
         log('warn', 'assessment.model_init_failed', {
           ticketId,
