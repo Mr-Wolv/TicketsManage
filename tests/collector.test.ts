@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferClaim, parseDashboardJson, parseRetryAfter } from '../server/collector.js';
+import { inferClaim, parseDashboardJson, parseRetryAfter, parseEmbedCloseTimestamp, extractCloseEmbed } from '../server/collector.js';
 import type { TranscriptMessage } from '../server/types.js';
 
 function message(patch: Partial<TranscriptMessage>): TranscriptMessage {
@@ -118,5 +118,55 @@ describe('claimant inference from the transcript', () => {
   it('does not guess when the transcript has no claim evidence', () => {
     const claim = inferClaim([message({ content: 'hello' })], users);
     expect(claim.state).toBe('unavailable');
+  });
+});
+
+describe('bot embed close timestamp extraction', () => {
+  it('parses ISO8601 embed timestamp into a Date', () => {
+    const timestamp = parseEmbedCloseTimestamp({ timestamp: '2026-10-26T16:48:03.441000+00:00' });
+    expect(timestamp).toBeInstanceOf(Date);
+    expect(timestamp!.toISOString()).toBe('2026-10-26T16:48:03.441Z');
+  });
+
+  it('returns null when the embed has no timestamp', () => {
+    expect(parseEmbedCloseTimestamp({ title: 'Ticket Closed' })).toBeNull();
+  });
+
+  it('extracts closed_at, closed_by, and close_reason from a Ticket Closed embed', () => {
+    const closeEmbed = extractCloseEmbed([
+      message({
+        embeds: [
+          {
+            title: 'Ticket Closed',
+            timestamp: '2026-10-26T16:48:03.441000+00:00',
+            fields: [
+              { name: 'Closed By', value: '<@1241894660541120632>' },
+              { name: 'Reason', value: 'Report' },
+            ],
+          },
+        ],
+      }),
+    ]);
+    expect(closeEmbed.closedAt).toBe('2026-10-26T16:48:03.441Z');
+    expect(closeEmbed.closedById).toBe('1241894660541120632');
+    expect(closeEmbed.closeReason).toBe('Report');
+  });
+
+  it('falls back to the first embed when the title is not Ticket Closed', () => {
+    const closeEmbed = extractCloseEmbed([
+      message({
+        embeds: [
+          {
+            timestamp: '2026-10-26T16:48:03.441000+00:00',
+            fields: [
+              { name: 'Closed By', value: '<@1241894660541120632>' },
+              { name: 'Reason', value: 'General question' },
+            ],
+          },
+        ],
+      }),
+    ]);
+    expect(closeEmbed.closedAt).toBe('2026-10-26T16:48:03.441Z');
+    expect(closeEmbed.closeReason).toBe('General question');
   });
 });

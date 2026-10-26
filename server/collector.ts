@@ -935,6 +935,14 @@ export class DashboardExtractor {
       transcript.firstTimestamp ??
       messages.find((message) => message.timestamp)?.timestamp ??
       null;
+    const closeEmbed = extractCloseEmbed(messages);
+    const closedAt =
+      metadata.closedAt ??
+      closeEmbed.closedAt ??
+      null;
+    const closedByName = metadata.closedByName ?? closeEmbed.closedByName;
+    const closedById = metadata.closedById ?? closeEmbed.closedById;
+    const closeReason = metadata.closeReason ?? closeEmbed.closeReason;
     return {
       found: true,
       ticketId,
@@ -944,7 +952,16 @@ export class DashboardExtractor {
         claimedById: claimed.id,
         claimedByName: claimedName,
         claimedState: claimed.state,
-        closedByName: closedName,
+        closedByName,
+        closedById,
+        closedAt,
+        closedAtSource: metadata.closedAtSource
+          ?? (closeEmbed.closedAt ? 'bot_embed' : null)
+          ?? (openedAt ? 'transcript_first_message' : null),
+        closeReason,
+        closeReasonState:
+          metadata.closeReasonState ??
+          (closeReason != null ? (closeReason === '' ? 'empty' : 'present') : 'unavailable'),
         openedAt,
         openedAtSource: metadata.openedAtSource ?? (openedAt ? 'transcript_first_message' : null),
         transcriptState: transcript.restricted ? 'restricted' : 'available',
@@ -1416,16 +1433,41 @@ export function logExtraction(outcome: ExtractionOutcome): void {
   log('info', 'collector.ticket', extractionDiagnostics(outcome));
 }
 
-// Bot embeds may include a close timestamp in MM/DD/YY HH:MM AM/PM format.
-// This is a best-effort parser; it returns null if no timestamp is found or if
-// the format does not match the expected bot-message shape.
+// Bot embeds include a close timestamp in ISO8601 format at embeds[0].timestamp.
+// This uses that authoritative field when present, avoiding brittle text parsing.
 export function parseEmbedCloseTimestamp(embed: Record<string, unknown>): Date | null {
-  const fields = Array.isArray(embed.fields) ? embed.fields : [];
-  const text = [String(embed.title ?? ''), String(embed.description ?? ''), ...fields.map((field) => String(field.value ?? ''))].join(' ');
-  const match = text.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})\s*(AM|PM)?/i);
-  if (!match) return null;
-  const parsed = new Date(`${match[1]} ${match[2]} ${match[3] ?? ''}`.trim());
+  const rawTimestamp = embed.timestamp != null ? String(embed.timestamp) : '';
+  if (!rawTimestamp) return null;
+  const parsed = new Date(rawTimestamp);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export interface CloseEmbed {
+  closedAt: string | null;
+  closedByName: string | null;
+  closedById: string | null;
+  closeReason: string | null;
+}
+
+export function extractCloseEmbed(messages: TranscriptMessage[]): CloseEmbed {
+  const botMessage = messages.find((message) => message.embeds.length > 0) ?? null;
+  if (!botMessage) return { closedAt: null, closedByName: null, closedById: null, closeReason: null };
+
+  const rawEmbed = botMessage.embeds.map(asRecord).find((embed): embed is Record<string, unknown> => embed !== null);
+  const embed = rawEmbed ? (rawEmbed.title === 'Ticket Closed' ? rawEmbed : rawEmbed) : null;
+  if (!embed) return { closedAt: null, closedByName: null, closedById: null, closeReason: null };
+
+  const timestamp = parseEmbedCloseTimestamp(embed);
+  const closedAt = timestamp ? timestamp.toISOString() : null;
+
+  const fields = Array.isArray(embed.fields) ? embed.fields : [];
+  const byName = fields.find((field: Record<string, unknown>) => /Closed By/i.test(String(field.name ?? '')));
+  const reasonField = fields.find((field: Record<string, unknown>) => /Reason/i.test(String(field.name ?? '')));
+  const closedByName = byName?.value ? String(byName.value).trim() : null;
+  const closedById = findMentionId(closedByName);
+  const closeReason = reasonField?.value ? String(reasonField.value).trim() : null;
+
+  return { closedAt, closedByName, closedById, closeReason };
 }
 
 export type { TicketMetadata };
