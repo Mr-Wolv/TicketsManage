@@ -238,6 +238,27 @@ export function loadCustomCategories(db: Db): Record<string, TaxonomyCategory> {
   return result;
 }
 
+export function loadUnifiedTaxonomy(db: Db): Record<string, TaxonomyCategory> {
+  const rows = db.loadUnifiedTaxonomy();
+  const result: Record<string, TaxonomyCategory> = {};
+  for (const row of rows) {
+    if (!row.active) continue;
+    result[row.id] = {
+      id: row.id,
+      code: row.code,
+      label: row.label,
+      labelAr: row.labelAr,
+      description: row.description,
+      points: row.points,
+      distinction: row.distinction || undefined,
+      examples: row.examples,
+      negativeExamples: row.negativeExamples.length > 0 ? row.negativeExamples : undefined,
+      isCustom: !row.isFixed,
+    };
+  }
+  return result;
+}
+
 export function findApprovedReason(db: Db, normalizedText: string): { categoryId: CategoryId; text: string } | null {
   const reasons = db.listApprovedReasons();
   let best: { categoryId: CategoryId; text: string; score: number } | null = null;

@@ -19,6 +19,7 @@ import type {
   TicketRecord,
   TranscriptMessage,
 } from './types.js';
+import { TAXONOMY } from './classifier/taxonomy.js';
 
 type Row = Record<string, unknown>;
 
@@ -334,6 +335,21 @@ export class Db {
         new_value TEXT,
         note TEXT NOT NULL DEFAULT '',
         changed_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS taxonomy_categories (
+        id TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        label TEXT NOT NULL,
+        label_ar TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        points REAL NOT NULL DEFAULT 0,
+        distinction TEXT NOT NULL DEFAULT '',
+        examples TEXT NOT NULL DEFAULT '[]',
+        negative_examples TEXT NOT NULL DEFAULT '[]',
+        active INTEGER NOT NULL DEFAULT 1,
+        is_fixed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS collection_runs (
         id TEXT PRIMARY KEY,
@@ -1357,6 +1373,138 @@ export class Db {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(action, entityType, entityId, oldValue, newValue, note, new Date().toISOString());
+  }
+
+  migrateUnifiedTaxonomy(): void {
+    this.connection.exec(`
+      CREATE TABLE IF NOT EXISTS taxonomy_categories (
+        id TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        label TEXT NOT NULL,
+        label_ar TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        points REAL NOT NULL DEFAULT 0,
+        distinction TEXT NOT NULL DEFAULT '',
+        examples TEXT NOT NULL DEFAULT '[]',
+        negative_examples TEXT NOT NULL DEFAULT '[]',
+        active INTEGER NOT NULL DEFAULT 1,
+        is_fixed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    const now = new Date().toISOString();
+    const stmt = this.connection.prepare(
+      `INSERT INTO taxonomy_categories (id, code, label, label_ar, description, points, distinction, examples, negative_examples, active, is_fixed, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET code = excluded.code, label = excluded.label, label_ar = excluded.label_ar, description = excluded.description, points = excluded.points, distinction = excluded.distinction, examples = excluded.examples, negative_examples = excluded.negative_examples, active = excluded.active, updated_at = excluded.updated_at`,
+    );
+    for (const category of TAXONOMY) {
+      stmt.run(
+        category.id,
+        category.code,
+        category.label,
+        category.labelAr,
+        category.description,
+        Number(category.points),
+        category.distinction ?? '',
+        JSON.stringify(category.examples ?? []),
+        JSON.stringify(category.negativeExamples ?? []),
+        1,
+        1,
+        now,
+        now,
+      );
+    }
+    const customCategories = this.listCustomCategories();
+    for (const category of customCategories) {
+      stmt.run(
+        category.id,
+        category.code,
+        category.label,
+        category.labelAr,
+        category.description,
+        Number(category.points),
+        category.distinction ?? '',
+        JSON.stringify(category.examples ?? []),
+        JSON.stringify(category.negativeExamples ?? []),
+        category.active,
+        0,
+        category.createdAt,
+        now,
+      );
+    }
+  }
+
+  loadUnifiedTaxonomy(): Array<{
+    id: string;
+    code: string;
+    label: string;
+    labelAr: string;
+    description: string;
+    points: number;
+    distinction: string;
+    examples: string[];
+    negativeExamples: string[];
+    active: number;
+    isFixed: boolean;
+    updatedAt: string;
+  }> {
+    const rows = this.connection.prepare('SELECT * FROM taxonomy_categories ORDER BY is_fixed DESC, created_at').all();
+    return rows.map((row) => ({
+      id: String(row.id),
+      code: String(row.code),
+      label: String(row.label),
+      labelAr: String(row.label_ar),
+      description: String(row.description),
+      points: Number(row.points),
+      distinction: String(row.distinction ?? ''),
+      examples: parseJson<string[]>(row.examples, []),
+      negativeExamples: parseJson<string[]>(row.negative_examples, []),
+      active: Number(row.active),
+      isFixed: Boolean(row.is_fixed),
+      updatedAt: String(row.updated_at),
+    }));
+  }
+
+  saveUnifiedCategory(input: {
+    id: string;
+    code: string;
+    label: string;
+    labelAr: string;
+    description: string;
+    points: number;
+    distinction?: string;
+    examples: string[];
+    negativeExamples?: string[];
+    active?: number;
+    isFixed?: boolean;
+  }): void {
+    const now = new Date().toISOString();
+    const existing = this.connection.prepare('SELECT * FROM taxonomy_categories WHERE id = ?').get(input.id) as Row | undefined;
+    const previous = existing ? JSON.stringify(existing) : null;
+    this.connection
+      .prepare(
+        `INSERT INTO taxonomy_categories (id, code, label, label_ar, description, points, distinction, examples, negative_examples, active, is_fixed, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET code = excluded.code, label = excluded.label, label_ar = excluded.label_ar, description = excluded.description, points = excluded.points, distinction = excluded.distinction, examples = excluded.examples, negative_examples = excluded.negative_examples, active = excluded.active, is_fixed = excluded.is_fixed, updated_at = excluded.updated_at`,
+      )
+      .run(
+        input.id,
+        input.code,
+        input.label,
+        input.labelAr,
+        input.description,
+        Number(input.points),
+        input.distinction ?? '',
+        JSON.stringify(input.examples ?? []),
+        JSON.stringify(input.negativeExamples ?? []),
+        input.active ?? 1,
+        input.isFixed ? 1 : 0,
+        existing ? String(existing.created_at) : now,
+        now,
+      );
+    this.logTaxonomyChange('update_category', 'taxonomy_category', input.id, previous, JSON.stringify(input), 'Updated unified taxonomy category');
   }
 
   // ---- collection runs ---------------------------------------------------

@@ -1416,4 +1416,16 @@ export function logExtraction(outcome: ExtractionOutcome): void {
   log('info', 'collector.ticket', extractionDiagnostics(outcome));
 }
 
+// Bot embeds may include a close timestamp in MM/DD/YY HH:MM AM/PM format.
+// This is a best-effort parser; it returns null if no timestamp is found or if
+// the format does not match the expected bot-message shape.
+export function parseEmbedCloseTimestamp(embed: Record<string, unknown>): Date | null {
+  const fields = Array.isArray(embed.fields) ? embed.fields : [];
+  const text = [String(embed.title ?? ''), String(embed.description ?? ''), ...fields.map((field) => String(field.value ?? ''))].join(' ');
+  const match = text.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})\s*(AM|PM)?/i);
+  if (!match) return null;
+  const parsed = new Date(`${match[1]} ${match[2]} ${match[3] ?? ''}`.trim());
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export type { TicketMetadata };
