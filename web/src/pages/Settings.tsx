@@ -607,26 +607,12 @@ export function SettingsPage() {
                       setBusy('cloud-models');
                       setCloudModelError(null);
                       try {
-                        const response = await fetch('https://openrouter.ai/api/v1/models', {
-                          headers: { Authorization: `Bearer ${form.cloudApiKey}` },
+                        const result = await api<{ models: string[] }>('/api/cloud/free-models', {
+                          method: 'POST',
+                          body: '{}',
                         });
-                        if (!response.ok) throw new Error(`OpenRouter responded ${response.status}`);
-                        const payload = (await response.json()) as Record<string, unknown>;
-                        const models = Array.isArray((payload.data as Array<Record<string, unknown>>) ?? [])
-                          ? (payload.data as Array<Record<string, unknown>>)
-                          : [];
-                        const free = models
-                          .filter((model) => {
-                            const pricing = model.pricing as Record<string, string> | undefined;
-                            return (
-                              pricing?.prompt === '0' &&
-                              pricing?.completion === '0' &&
-                              typeof model.id === 'string'
-                            );
-                          })
-                          .map((model) => String(model.id));
-                        setCloudFreeModels(free);
-                        if (free.length === 0) {
+                        setCloudFreeModels(result.models);
+                        if (result.models.length === 0) {
                           setCloudModelError('No free models found in the current OpenRouter roster.');
                         }
                       } catch (error) {
