@@ -238,66 +238,21 @@ export function CollectPage() {
           <ConnectionCard onChanged={loadCollection} />
 
           <SectionCard
-            title="Date range"
-            description="Use DD/MM/YY. Closed-at is the date basis."
+            title={
+              collectMode === 'date'
+                ? 'Date range'
+                : collectMode === 'id'
+                  ? 'Ticket ID range'
+                  : 'Ticket ID + date filter'
+            }
+            description={
+              collectMode === 'date'
+                ? 'Use DD/MM/YY. Closed-at is the date basis.'
+                : collectMode === 'id'
+                  ? 'Enter the inclusive ticket ID range.'
+                  : 'Combine date and ID filters for precise collection.'
+            }
           >
-            <div className="form-grid">
-              <label className="field">
-                <span className="field-label">From</span>
-                <input
-                  className="input"
-                  placeholder="17/10/26"
-                  value={dateFrom}
-                  onChange={(event) => {
-                    setDateFrom(event.target.value.replace(/[^\d/]/g, '').slice(0, 8));
-                    setPreview(null);
-                  }}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">To</span>
-                <input
-                  className="input"
-                  placeholder="23/10/26"
-                  value={dateTo}
-                  onChange={(event) => {
-                    setDateTo(event.target.value.replace(/[^\d/]/g, '').slice(0, 8));
-                    setPreview(null);
-                  }}
-                />
-              </label>
-            </div>
-            <div className="form-grid">
-              <label className="field">
-                <span className="field-label">Timezone</span>
-                <select
-                  className="input"
-                  value={dateTimezone}
-                  onChange={(event) => {
-                    setDateTimezone(event.target.value);
-                    setPreview(null);
-                  }}
-                >
-                  <option value="Africa/Cairo">Africa/Cairo</option>
-                  <option value="UTC">UTC</option>
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">Date basis</span>
-                <select
-                  className="input"
-                  value={dateBasis}
-                  onChange={(event) => {
-                    setDateBasis(event.target.value);
-                    setPreview(null);
-                  }}
-                >
-                  <option value="closed">Closed at</option>
-                  <option value="opened">Opened at</option>
-                  <option value="activity">Last activity</option>
-                </select>
-              </label>
-            </div>
             <label className="field">
               <span className="field-label">Collection mode</span>
               <select
@@ -313,6 +268,67 @@ export function CollectPage() {
                 <option value="hybrid">By ID + date filter</option>
               </select>
             </label>
+            {(collectMode === 'date' || collectMode === 'hybrid') && (
+              <div className="form-grid">
+                <label className="field">
+                  <span className="field-label">From</span>
+                  <input
+                    className="input"
+                    placeholder="17/10/26"
+                    value={dateFrom}
+                    onChange={(event) => {
+                      setDateFrom(event.target.value.replace(/[^\d/]/g, '').slice(0, 8));
+                      setPreview(null);
+                    }}
+                  />
+                </label>
+                <label className="field">
+                  <span className="field-label">To</span>
+                  <input
+                    className="input"
+                    placeholder="23/10/26"
+                    value={dateTo}
+                    onChange={(event) => {
+                      setDateTo(event.target.value.replace(/[^\d/]/g, '').slice(0, 8));
+                      setPreview(null);
+                    }}
+                  />
+                </label>
+              </div>
+            )}
+            {(collectMode === 'date' || collectMode === 'hybrid') && (
+              <div className="form-grid">
+                <label className="field">
+                  <span className="field-label">Timezone</span>
+                  <select
+                    className="input"
+                    value={dateTimezone}
+                    onChange={(event) => {
+                      setDateTimezone(event.target.value);
+                      setPreview(null);
+                    }}
+                  >
+                    <option value="Africa/Cairo">Africa/Cairo</option>
+                    <option value="UTC">UTC</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field-label">Date basis</span>
+                  <select
+                    className="input"
+                    value={dateBasis}
+                    onChange={(event) => {
+                      setDateBasis(event.target.value);
+                      setPreview(null);
+                    }}
+                  >
+                    <option value="closed">Closed at</option>
+                    <option value="opened">Opened at</option>
+                    <option value="activity">Last activity</option>
+                  </select>
+                </label>
+              </div>
+            )}
             {(collectMode === 'id' || collectMode === 'hybrid') && (
               <div className="form-grid">
                 <label className="field">

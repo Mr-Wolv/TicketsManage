@@ -22,8 +22,8 @@ test.describe('Collect page mode switching', () => {
 
     await expect(page.getByLabel('Starting ticket ID')).toBeVisible();
     await expect(page.getByLabel('Ending ticket ID')).toBeVisible();
-    await expect(page.getByLabel('From', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('To', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('From', { exact: true })).not.toBeVisible();
+    await expect(page.getByLabel('To', { exact: true })).not.toBeVisible();
   });
 
   test('shows both inputs in hybrid mode', async ({ page }) => {

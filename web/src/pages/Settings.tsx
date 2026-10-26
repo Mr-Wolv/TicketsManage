@@ -541,7 +541,7 @@ export function SettingsPage() {
                 onChange={(event) => {
                   const value = event.target.value;
                   if (value === 'custom') {
-                    update('cloudProviderUrl', '');
+                    update('cloudProviderUrl', 'https://');
                     update('cloudModel', '');
                   } else {
                     update('cloudProviderUrl', '');
