@@ -78,20 +78,18 @@ function openUrl(url) {
 }
 
 async function ensureBuild() {
-  const webDist = path.join(APP_DIR, 'web-dist', 'index.html');
-  if (fs.existsSync(webDist)) return;
-  console.log('Building the local interface for the first time...');
+  console.log('Building the local interface...');
   return new Promise((resolve, reject) => {
     const child = spawn('npm', ['run', 'build:web'], {
       cwd: APP_DIR,
       shell: process.platform === 'win32',
     });
-    child.stdout.on('data', (d) => process.stdout.write(d));
-    child.stderr.on('data', (d) => process.stderr.write(d));
-    child.on('close', (code) =>
-      code === 0 ? resolve(0) : reject(new Error(`Build exited with code ${code}`)),
-    );
-  });
+  child.stdout.on('data', (d) => process.stdout.write(d));
+  child.stderr.on('data', (d) => process.stderr.write(d));
+  child.on('close', (code) =>
+    code === 0 ? resolve(0) : reject(new Error(`Build exited with code ${code}`)),
+  );
+});
 }
 
 async function tryStartOnPort(port) {
