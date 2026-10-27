@@ -1,6 +1,6 @@
 # TicketsManage
 
-A private, local Windows application for collecting closed Tickets v2 records, classifying closing reasons, calculating staff performance points, reviewing uncertain results, and exporting reports.
+A local-first ticket intelligence and staff performance application. It collects ticket records, classifies closing reasons, calculates staff performance points, supports human review, and exports reports through a responsive web interface.
 
 TicketsManage is UI-first. You launch it, sign in to the dashboard in a dedicated browser, enter an inclusive ticket-ID range, and work entirely from the local web interface. Data, the browser profile, corrections, and exports stay on this computer.
 
