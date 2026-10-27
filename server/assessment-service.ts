@@ -6,6 +6,7 @@ import { classifyReason } from './classifier/pipeline.js';
 import { isCategoryId, loadUnifiedTaxonomy, pointsFor } from './classifier/taxonomy.js';
 import { applyStaffCredit, basePointsFor } from './scoring.js';
 import { OpenAiCompatibleProvider, adaptCloudResult, buildTaxonomyContext } from './classifier/cloud.js';
+import { LRUCache } from './classifier/lru.js';
 import type {
   CategoryAssessment,
   CategoryId,
@@ -461,139 +462,162 @@ export class AssessmentService {
       throw new Error('Cloud provider is not configured.');
     }
 
-    const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
-    const taxonomyContext = buildTaxonomyContext(
-      Object.values(loadUnifiedTaxonomy(this.db)).map((category) => ({
-        id: category.id,
-        code: category.code,
-        label: category.label,
-        examples: category.examples,
-      })),
-    );
-
     const pending = this.db.listReviews('pending');
-    let processed = 0;
-    let updated = 0;
-    let failed = 0;
-
-    const workers = Math.max(1, Math.min(12, settings.cloudTimeoutMs > 0 ? Math.ceil(60000 / settings.cloudTimeoutMs) : 6));
-
-    const processOne = async (entry: typeof pending[number]): Promise<{ updated: number; failed: number }> => {
-      const ticket = entry.ticket;
-      const assessment = entry.assessment;
-      if (!ticket || !assessment || assessment.humanCorrected) {
-        return { updated: 0, failed: 0 };
-      }
-
-      try {
-        const result = await provider.classify(
-          ticket.closeReason ?? '',
-          taxonomyContext,
-          settings.cloudTimeoutMs,
-        );
-        const adapted = adaptCloudResult(result) as any;
-        const categories = (adapted.categories ?? []).map((c: any) => ({
-          categoryId: c.categoryId,
-          points: pointsFor(c.categoryId, this.db),
-          evidence: c.evidence ?? [],
-          method: 'cloud' as const,
-          confidence: c.confidence ?? 0,
-        }));
-
-        if (categories.length === 0) {
-          throw new Error('Cloud model returned no categories.');
-        }
-
-        const basePoints = basePointsFor(categories, this.db);
-        const credit = applyStaffCredit(
-          {
-            claimedState: ticket.claimedState,
-            claimedById: ticket.claimedById,
-            claimedByName: ticket.claimedByName,
-            closedState: ticket.closedState,
-            closedById: ticket.closedById,
-            closedByName: ticket.closedByName,
-            reasonState: ticket.closeReasonState,
-          },
-          basePoints,
-        );
-
-        const reviewReasons = [...new Set(assessment.reviewReasons ?? [])];
-        const newAssessment = this.buildStoredAssessment({
-          ticket,
-          categories,
-          fallback: assessment.fallback,
-          method: 'cloud',
-          confidence: categories[0]?.confidence ?? 0,
-          explanation: (adapted.explanation as string) ?? 'Cloud semantic reclassification.',
-          alternatives: (adapted.alternatives as any[]) ?? [],
-          classificationReviewReasons: reviewReasons,
-          unresolvedPortion: (adapted.unresolvedPortion as string | null) ?? null,
-          model: result.model,
-          humanCorrected: false,
-        });
-
-        this.db.transaction(() => {
-          this.db.saveAssessment(newAssessment);
-          if (reviewReasons.length === 0) {
-            this.db.setReviewReasons(assessment.ticketId, []);
-          }
-          this.db.addReviewHistory(
-            assessment.ticketId,
-            'reassessed',
-            assessment.categories.map((c: { categoryId: string }) => c.categoryId),
-            categories.map((c: { categoryId: string }) => c.categoryId),
-            'Cloud AI reclassification.',
-          );
-        });
-
-        return { updated: 1, failed: 0 };
-      } catch (error) {
-        log('warn', 'assessment.cloud_review_failed', {
-          ticketId: ticket.ticketId,
-          error: error instanceof Error ? error.message : 'unknown',
-        });
-        return { updated: 0, failed: 1 };
-      }
-    };
-
     const eligible = pending.filter((entry) => {
       const ticket = entry.ticket;
       const assessment = entry.assessment;
-      return !!ticket && !!assessment && !assessment.humanCorrected;
+      if (!ticket || !assessment || assessment.humanCorrected) return false;
+      const reason = ticket.closeReason?.trim();
+      if (!reason) return false;
+      const reviewReasons = assessment.reviewReasons ?? [];
+      const isUnresolvedCredit = reviewReasons.some((r) => r.startsWith('Staff attribution unresolved'));
+      const isLowConfidence = (assessment.confidence ?? 1) < 0.85;
+      const isFallback = assessment.fallback === true;
+      return isUnresolvedCredit || isLowConfidence || isFallback;
     });
-    processed = eligible.length;
 
-    const pool: Promise<{ updated: number; failed: number }>[] = [];
+    const processed = eligible.length;
+    if (processed === 0) {
+      return { processed: 0, updated: 0, failed: 0 };
+    }
+
+    // Cache taxonomy context per settings hash
+    const taxonomyKey = `${settings.cloudProviderUrl}|${settings.cloudModel}|${settings.cloudTimeoutMs}`;
+    const taxonomyCache = new Map<string, string>();
+    const resultCache = new Map<string, { categories: any[]; alternatives: any[] }>();
+
+    const getTaxonomyContext = (): string => {
+      let ctx = taxonomyCache.get(taxonomyKey);
+      if (!ctx) {
+        ctx = buildTaxonomyContext(
+          Object.values(loadUnifiedTaxonomy(this.db)).map((category) => ({
+            id: category.id,
+            code: category.code,
+            label: category.label,
+            examples: category.examples,
+          })),
+        );
+        taxonomyCache.set(taxonomyKey, ctx);
+      }
+      return ctx;
+    };
+
+    const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
+    const workers = 12;
+    const timeoutMs = Math.min(settings.cloudTimeoutMs, 10000);
+    const updates: Array<{ assessment: any; ticketId: string; oldCategories: string[]; newCategories: string[] }> = [];
+
+    const processOne = async (entry: typeof eligible[number]): Promise<boolean> => {
+      const ticket = entry.ticket;
+      const assessment = entry.assessment;
+      if (!ticket || !assessment) return false;
+
+      const reason = ticket.closeReason ?? '';
+      const reasonHash = `${reason.slice(0, 200)}|${taxonomyKey}`;
+      
+      let categories: any[];
+      let alternatives: any[];
+      
+      const cached = resultCache.get(reasonHash);
+      if (cached) {
+        categories = cached.categories;
+        alternatives = cached.alternatives;
+      } else {
+        try {
+          const result = await provider.classify(reason, getTaxonomyContext(), timeoutMs);
+          const adapted = adaptCloudResult(result) as any;
+          categories = (adapted.categories ?? []).map((c: any) => ({
+            categoryId: c.categoryId,
+            points: pointsFor(c.categoryId, this.db),
+            evidence: c.evidence ?? [],
+            method: 'cloud' as const,
+            confidence: c.confidence ?? 0,
+          }));
+          alternatives = (adapted.alternatives as any[]) ?? [];
+          
+          if (categories.length > 0) {
+            resultCache.set(reasonHash, { categories, alternatives });
+          }
+        } catch (error) {
+          return false;
+        }
+      }
+
+      if (categories.length === 0) return false;
+
+      const basePoints = basePointsFor(categories, this.db);
+      const credit = applyStaffCredit(
+        {
+          claimedState: ticket.claimedState,
+          claimedById: ticket.claimedById,
+          claimedByName: ticket.claimedByName,
+          closedState: ticket.closedState,
+          closedById: ticket.closedById,
+          closedByName: ticket.closedByName,
+          reasonState: ticket.closeReasonState,
+        },
+        basePoints,
+      );
+
+      const reviewReasons = [...new Set(assessment.reviewReasons ?? [])];
+      const newAssessment = this.buildStoredAssessment({
+        ticket,
+        categories,
+        fallback: assessment.fallback,
+        method: 'cloud',
+        confidence: categories[0]?.confidence ?? 0,
+        explanation: 'Cloud semantic reclassification.',
+        alternatives,
+        classificationReviewReasons: reviewReasons,
+        unresolvedPortion: null,
+        model: settings.cloudModel,
+        humanCorrected: false,
+      });
+
+      updates.push({
+        assessment: newAssessment,
+        ticketId: assessment.ticketId,
+        oldCategories: assessment.categories.map((c: any) => c.categoryId),
+        newCategories: categories.map((c: any) => c.categoryId),
+      });
+      return true;
+    };
+
+    // Parallel execution with worker pool
+    const pool: Promise<boolean>[] = [];
     for (const entry of eligible) {
       const task = processOne(entry);
       pool.push(task);
       if (pool.length >= workers) {
-        const settled = await Promise.allSettled(pool);
-        for (const result of settled) {
-          if (result.status === 'fulfilled') {
-            updated += result.value.updated;
-            failed += result.value.failed;
-          } else {
-            failed += 1;
-          }
-        }
+        await Promise.allSettled(pool);
         pool.length = 0;
       }
     }
     if (pool.length > 0) {
-      const settled = await Promise.allSettled(pool);
-      for (const result of settled) {
-        if (result.status === 'fulfilled') {
-          updated += result.value.updated;
-          failed += result.value.failed;
-        } else {
-          failed += 1;
-        }
-      }
+      await Promise.allSettled(pool);
     }
 
-    return { processed, updated, failed };
+    // Batch DB writes in single transaction
+    const updated = updates.length;
+    if (updated > 0) {
+      this.db.transaction(() => {
+        for (const update of updates) {
+          this.db.saveAssessment(update.assessment);
+          if (update.assessment.reviewReasons.length === 0) {
+            this.db.setReviewReasons(update.ticketId, []);
+          }
+          this.db.addReviewHistory(
+            update.ticketId,
+            'reassessed',
+            update.oldCategories,
+            update.newCategories,
+            'Cloud AI reclassification.',
+          );
+        }
+      });
+    }
+
+    return { processed, updated, failed: processed - updated };
   }
 
   listPendingAssessmentIds(limit = 100, includeDemo = false): string[] {
