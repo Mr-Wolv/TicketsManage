@@ -21,8 +21,6 @@ interface TicketFilters {
   fallback: string;
   reviewStatus: string;
   status: string;
-  from: string;
-  to: string;
   sort: string;
   dir: string;
 }
@@ -34,8 +32,6 @@ const INITIAL_FILTERS: TicketFilters = {
   fallback: '',
   reviewStatus: '',
   status: '',
-  from: '',
-  to: '',
   sort: 'id',
   dir: 'desc',
 };
@@ -60,8 +56,6 @@ export function TicketsPage() {
       if (filters.fallback) params.set('fallback', filters.fallback);
       if (filters.reviewStatus) params.set('reviewStatus', filters.reviewStatus);
       if (filters.status) params.set('status', filters.status);
-      if (filters.from) params.set('from', filters.from);
-      if (filters.to) params.set('to', filters.to);
       params.set('sort', filters.sort);
       params.set('dir', filters.dir);
       if (demoMode) params.set('demo', 'only');
@@ -84,7 +78,7 @@ export function TicketsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters.search, filters.staff, filters.category, filters.fallback, filters.reviewStatus, filters.status, filters.from, filters.to, filters.sort, filters.dir, demoMode]);
+  }, [filters.search, filters.staff, filters.category, filters.fallback, filters.reviewStatus, filters.status, filters.sort, filters.dir, demoMode]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const hasFilters = useMemo(
@@ -97,8 +91,6 @@ export function TicketsPage() {
   };
 
   const exportQuery = new URLSearchParams();
-  if (filters.from) exportQuery.set('from', filters.from);
-  if (filters.to) exportQuery.set('to', filters.to);
   if (filters.staff) exportQuery.set('staff', filters.staff);
   if (demoMode) exportQuery.set('demo', 'only');
 
@@ -184,14 +176,6 @@ export function TicketsPage() {
               <option value="no_transcript">No transcript</option>
               <option value="failed">Failed</option>
             </select>
-          </label>
-          <label className="field">
-            <span className="field-label">From date</span>
-            <input type="date" className="input" value={filters.from} onChange={(event) => update('from', event.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">To date</span>
-            <input type="date" className="input" value={filters.to} onChange={(event) => update('to', event.target.value)} />
           </label>
           <label className="field">
             <span className="field-label">Sort</span>
@@ -288,7 +272,6 @@ export function TicketsPage() {
                     </td>
                     <td>
                       <ValueOrUnavailable value={ticket.openerUsername} />
-                      <div className="cell-sub">{formatDate(ticket.openedAt)}</div>
                     </td>
                     <td>
                       <ValueOrUnavailable
