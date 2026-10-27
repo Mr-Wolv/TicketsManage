@@ -14,6 +14,19 @@ import {
 } from '../components/ui';
 import type { Ticket } from '../types';
 
+interface MissingReport {
+  start: string;
+  end: string;
+  count: number;
+  missingIds: string[];
+  rangeSize: number;
+  collectedInRange: number;
+  scope: 'collection' | 'demo' | 'all';
+}
+
+/** Derived markers are bounded so a wide interval cannot flood the page. */
+const MISSING_MARKER_LIMIT = 200;
+
 interface TicketFilters {
   search: string;
   staff: string;
@@ -49,7 +62,8 @@ export function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [missingIds, setMissingIds] = useState<string[]>([]);
+  const [missingReport, setMissingReport] = useState<MissingReport | null>(null);
+  const [missingError, setMissingError] = useState<string | null>(null);
   const [missingLoading, setMissingLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -84,9 +98,15 @@ export function TicketsPage() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  // The report describes one interval in the current demo scope. Every state
+  // write is guarded by `cancelled` so a slow response for an interval the user
+  // has already left can neither overwrite the newer report nor clear the
+  // newer loading state.
   useEffect(() => {
+    setMissingReport(null);
+    setMissingError(null);
     if (!filters.idStart || !filters.idEnd) {
-      setMissingIds([]);
+      setMissingLoading(false);
       return;
     }
     const controller = new AbortController();
@@ -94,23 +114,36 @@ export function TicketsPage() {
     setMissingLoading(true);
     const fetchMissing = async () => {
       try {
-        const result = await api<{ missingIds: string[] }>(
-          `/api/tickets/missing-ids?start=${encodeURIComponent(filters.idStart)}&end=${encodeURIComponent(filters.idEnd)}`,
+        const scope = demoMode ? '&demo=only' : '';
+        const result = await api<MissingReport>(
+          `/api/tickets/missing-ids?start=${encodeURIComponent(filters.idStart)}&end=${encodeURIComponent(filters.idEnd)}${scope}`,
           { signal: controller.signal },
         );
-        if (!cancelled) setMissingIds(result.missingIds ?? []);
-      } catch {
-        if (!cancelled) setMissingIds([]);
+        if (cancelled) return;
+        setMissingReport({ ...result, missingIds: result.missingIds ?? [] });
+        setMissingError(null);
+      } catch (reportError) {
+        if (cancelled) return;
+        if (reportError instanceof DOMException && reportError.name === 'AbortError') return;
+        setMissingReport(null);
+        setMissingError(
+          reportError instanceof Error
+            ? reportError.message
+            : 'The uncollected ID report could not be loaded.',
+        );
       } finally {
         if (!cancelled) setMissingLoading(false);
       }
     };
-    void fetchMissing();
+    // Debounced like the ticket list, so a half-typed interval neither issues a
+    // request per keystroke nor flashes an error the user is still fixing.
+    const timer = window.setTimeout(() => void fetchMissing(), 300);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
       controller.abort();
     };
-  }, [filters.idStart, filters.idEnd]);
+  }, [filters.idStart, filters.idEnd, demoMode]);
 
   useEffect(() => {
     setPage(1);
@@ -126,7 +159,9 @@ export function TicketsPage() {
     setFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const missingCount = missingIds.length;
+  const missingCount = missingReport?.count ?? 0;
+  const shownMissingIds = missingReport ? missingReport.missingIds.slice(0, MISSING_MARKER_LIMIT) : [];
+  const intervalReady = Boolean(filters.idStart && filters.idEnd);
 
   const exportQuery = new URLSearchParams();
   if (filters.staff) exportQuery.set('staff', filters.staff);
@@ -171,6 +206,7 @@ export function TicketsPage() {
             <span className="field-label">Start ID</span>
             <input
               className="input"
+              inputMode="numeric"
               placeholder="e.g. 9001"
               value={filters.idStart}
               onChange={(event) => update('idStart', event.target.value)}
@@ -180,6 +216,7 @@ export function TicketsPage() {
             <span className="field-label">End ID</span>
             <input
               className="input"
+              inputMode="numeric"
               placeholder="e.g. 9010"
               value={filters.idEnd}
               onChange={(event) => update('idEnd', event.target.value)}
@@ -261,28 +298,62 @@ export function TicketsPage() {
 
       {error ? <Alert tone="danger" title="Ticket explorer error">{error}</Alert> : null}
 
-      {(missingCount > 0 || missingLoading) && filters.idStart && filters.idEnd ? (
+      {intervalReady ? (
         <SectionCard
           title={
             <span>
-              Missing IDs in range {filters.idStart}–{filters.idEnd}
+              Uncollected IDs in interval {filters.idStart}–{filters.idEnd}
               {missingLoading ? <span className="muted"> · computing…</span> : null}
             </span>
           }
           description={
-            missingCount > 0
-              ? `${missingCount} ticket ID${missingCount === 1 ? '' : 's'} in this range are not present in the local database.`
-              : 'No missing IDs detected in this range.'
+            demoMode
+              ? 'Compared against demo records only, because demo mode is on.'
+              : 'Compared against the local collection only. An ID marked here may still exist on the dashboard; the app records what it has collected, not what the dashboard holds.'
           }
         >
-          <div className="missing-grid">
-            {missingIds.map((id) => (
-              <span key={id} className="missing-badge">
-                <StatusBadge value="not_found" />
-                <span className="missing-id">{id}</span>
-              </span>
-            ))}
-          </div>
+          {missingError ? (
+            <Alert tone="danger" title="Uncollected IDs could not be listed">
+              {missingError}
+            </Alert>
+          ) : missingReport && missingReport.collectedInRange === 0 ? (
+            <Alert tone="warn" title="No local records in this interval">
+              None of the {formatNumber(missingReport.rangeSize)} IDs from {missingReport.start} to{' '}
+              {missingReport.end} are in the local collection, so the whole interval is uncollected.
+              These tickets are not necessarily absent from the dashboard.
+            </Alert>
+          ) : missingReport && missingCount === 0 ? (
+            <Alert tone="success" title="No gaps in this interval">
+              Every ID from {missingReport.start} to {missingReport.end} is present in the local
+              collection.
+            </Alert>
+          ) : missingReport ? (
+            <>
+              <div className="missing-grid">
+                {shownMissingIds.map((id) => (
+                  <span
+                    key={id}
+                    className="missing-badge"
+                    title={`Ticket ${id} has no local record. It may still exist on the dashboard.`}
+                  >
+                    <ToneBadge tone="warn">Not collected</ToneBadge>
+                    <span className="missing-id">{id}</span>
+                  </span>
+                ))}
+              </div>
+              <p className="muted missing-summary">
+                {formatNumber(missingCount)} of {formatNumber(missingReport.rangeSize)} IDs in this
+                interval {missingCount === 1 ? 'has' : 'have'} no local record, and{' '}
+                {formatNumber(missingReport.collectedInRange)}{' '}
+                {missingReport.collectedInRange === 1 ? 'is' : 'are'} collected.
+                {missingCount > shownMissingIds.length
+                  ? ` Showing the first ${formatNumber(shownMissingIds.length)} markers — narrow the interval to see the rest.`
+                  : ''}
+              </p>
+            </>
+          ) : (
+            <p className="muted missing-summary">Computing the uncollected IDs in this interval…</p>
+          )}
         </SectionCard>
       ) : null}
 

@@ -5,7 +5,7 @@ describe('cloud semantic provider', () => {
   let provider: OpenAiCompatibleProvider;
 
   beforeEach(() => {
-    provider = new OpenAiCompatibleProvider('http://127.0.0.1:1', 'key', 'model');
+    provider = new OpenAiCompatibleProvider('https://openrouter.ai/api/v1', 'key', 'model');
   });
 
   it('throws when provider URL is empty', async () => {

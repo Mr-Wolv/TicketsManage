@@ -36,6 +36,17 @@ function loadAllTickets(db: Db, options: ExportOptions): TicketRecord[] {
   return tickets;
 }
 
+/**
+ * Category metadata for exports. A stored identifier that is missing from the
+ * taxonomy (an old provider response, or a custom category that was removed)
+ * degrades to its raw identifier: one unknown row must never make the whole
+ * export fail with a 500.
+ */
+function categoryMeta(categoryId: string): { code: string; label: string } {
+  const meta = TAXONOMY_BY_ID[categoryId];
+  return { code: meta?.code ?? categoryId, label: meta?.label ?? categoryId };
+}
+
 function ticketExportRecord(ticket: TicketRecord): Record<string, unknown> {
   const assessment = ticket.assessment;
   return {
@@ -69,8 +80,7 @@ function ticketExportRecord(ticket: TicketRecord): Record<string, unknown> {
       ? {
           categories: assessment.categories.map((category) => ({
             id: category.categoryId,
-            code: TAXONOMY_BY_ID[category.categoryId]!.code,
-            label: TAXONOMY_BY_ID[category.categoryId]!.label,
+            ...categoryMeta(category.categoryId),
             points: category.points,
             method: category.method,
             confidence: category.confidence,
@@ -295,7 +305,7 @@ export function buildReviewExport(
       closeReasonState: review.reasonState,
       categories: review.categories.map((category) => ({
         id: category.categoryId,
-        code: TAXONOMY_BY_ID[category.categoryId]!.code,
+        code: categoryMeta(category.categoryId).code,
         points: category.points,
         method: category.method,
         evidence: category.evidence,

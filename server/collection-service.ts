@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import type { Db } from './db.js';
-import { CLASSIFIER_VERSION, LARGE_RANGE_THRESHOLD, MAX_RANGE_SIZE } from './config.js';
+import {
+  CLASSIFIER_VERSION,
+  LARGE_RANGE_THRESHOLD,
+  MAX_RANGE_SIZE,
+  resolveApprovedCloudBaseUrl,
+} from './config.js';
 import type { ConnectionManager } from './connection.js';
 import { ConnectionError } from './connection.js';
 import type { AssessmentService } from './assessment-service.js';
@@ -206,6 +211,14 @@ export class CollectionService {
 
     if (ids.length === 0) {
       throw Object.assign(new Error('Provide at least one numeric ticket ID.'), { code: 'INVALID_RANGE' });
+    }
+    // Manual IDs must respect the same maximum batch size as an ID range;
+    // otherwise a single request could enqueue unbounded dashboard work.
+    if (ids.length > MAX_RANGE_SIZE) {
+      throw Object.assign(
+        new Error(`Provide at most ${MAX_RANGE_SIZE.toLocaleString()} ticket IDs per run.`),
+        { code: 'INVALID_RANGE' },
+      );
     }
 
     const latest = this.db.latestRun();
@@ -1060,6 +1073,12 @@ export class CollectionService {
     try {
       const settings = this.db.getSettings();
       if (!settings.cloudProviderUrl || !settings.cloudApiKey || !settings.cloudModel) {
+        return;
+      }
+      if (!resolveApprovedCloudBaseUrl(settings.cloudProviderUrl)) {
+        log('warn', 'collection.cloud_review_skipped', {
+          reason: 'The configured cloud endpoint is not the approved OpenRouter destination.',
+        });
         return;
       }
       const result = await this.assessments.reclassifyPendingReviewsWithCloud();

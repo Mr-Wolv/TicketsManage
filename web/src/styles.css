@@ -2105,6 +2105,9 @@ pre {
   gap: 6px;
   background: rgba(127, 127, 127, 0.08);
   border: 1px solid var(--border);
+  /* Dashed on purpose: this is a derived placeholder for a gap, not a stored
+     ticket record, so it must not read as one of the table rows. */
+  border-style: dashed;
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 13px;
@@ -2114,4 +2117,9 @@ pre {
 .missing-id {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+}
+
+.missing-summary {
+  margin: 10px 0 0;
+  font-size: 13px;
 }

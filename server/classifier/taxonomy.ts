@@ -211,13 +211,17 @@ export function isCategoryId(value: unknown): value is CategoryId {
 }
 
 export function pointsFor(categoryId: CategoryId, db?: Db): number {
+  // `categoryId` is only a compile-time union; stored rows and provider output
+  // are validated at runtime, so the unknown case is handled explicitly below.
   if (db) {
     const override = db.getCategoryPoints(categoryId);
     if (override !== null) return override;
     const unified = loadUnifiedTaxonomy(db);
     if (unified[categoryId]) return unified[categoryId]!.points;
   }
-  return TAXONOMY_BY_ID[categoryId]!.points;
+  // An unknown ID has no points. Returning 0 keeps every stored or
+  // provider-supplied identifier from turning a score into NaN.
+  return TAXONOMY_BY_ID[categoryId]?.points ?? 0;
 }
 
 export function loadCustomCategories(db: Db): Record<string, TaxonomyCategory> {

@@ -1,11 +1,11 @@
-import { CLASSIFIER_VERSION, TAXONOMY_VERSION } from './config.js';
+import { CLASSIFIER_VERSION, TAXONOMY_VERSION, resolveApprovedCloudBaseUrl } from './config.js';
 import type { Db } from './db.js';
 import { log } from './logger.js';
 import { normalizeReason } from './classifier/normalize.js';
 import { classifyReason } from './classifier/pipeline.js';
 import { isCategoryId, loadUnifiedTaxonomy, pointsFor } from './classifier/taxonomy.js';
 import { applyStaffCredit, basePointsFor } from './scoring.js';
-import { OpenAiCompatibleProvider, adaptCloudResult, buildTaxonomyContext, classifyWithRetry } from './classifier/cloud.js';
+import { OpenAiCompatibleProvider, buildTaxonomyContext, classifyWithRetry, sanitizeCloudResult } from './classifier/cloud.js';
 import { LRUCache } from './classifier/lru.js';
 import type {
   CategoryAssessment,
@@ -461,6 +461,12 @@ export class AssessmentService {
     if (!settings.cloudProviderUrl || !settings.cloudApiKey || !settings.cloudModel) {
       throw new Error('Cloud provider is not configured.');
     }
+    // Fail before dispatching anything if the configured endpoint is not the
+    // approved destination: the stored API key must never leave for another host.
+    const approvedBaseUrl = resolveApprovedCloudBaseUrl(settings.cloudProviderUrl);
+    if (!approvedBaseUrl) {
+      throw new Error('CLOUD_ENDPOINT_NOT_APPROVED');
+    }
 
     const pending = this.db.listReviews('pending');
     const eligible = pending.filter((entry) => {
@@ -484,13 +490,20 @@ export class AssessmentService {
     // Cache taxonomy context per settings hash
     const taxonomyKey = `${settings.cloudProviderUrl}|${settings.cloudModel}|${settings.cloudTimeoutMs}`;
     const taxonomyCache = new Map<string, string>();
-    const resultCache = new Map<string, { categories: any[]; alternatives: any[] }>();
+    const resultCache = new Map<
+      string,
+      { categories: any[]; alternatives: any[]; reviewRequired: boolean }
+    >();
+    // The unified taxonomy is the authority for what a category ID may be: an
+    // ID that is not in here has no points value and can never be scored.
+    const unifiedTaxonomy = loadUnifiedTaxonomy(this.db);
+    const validCategoryIds = new Set(Object.keys(unifiedTaxonomy));
 
     const getTaxonomyContext = (): string => {
       let ctx = taxonomyCache.get(taxonomyKey);
       if (!ctx) {
         ctx = buildTaxonomyContext(
-          Object.values(loadUnifiedTaxonomy(this.db)).map((category) => ({
+          Object.values(unifiedTaxonomy).map((category) => ({
             id: category.id,
             code: category.code,
             label: category.label,
@@ -502,7 +515,7 @@ export class AssessmentService {
       return ctx;
     };
 
-    const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
+    const provider = new OpenAiCompatibleProvider(approvedBaseUrl, settings.cloudApiKey, settings.cloudModel);
     const workers = Math.min(Math.max(settings.cloudMaxWorkers, 1), 50);
     const timeoutMs = Math.min(settings.cloudTimeoutMs, 10000);
     const updates: Array<{ assessment: any; ticketId: string; oldCategories: string[]; newCategories: string[] }> = [];
@@ -518,30 +531,41 @@ export class AssessmentService {
       if (!ticket || !assessment) return false;
 
       const reason = ticket.closeReason ?? '';
-      const reasonHash = `${reason.slice(0, 200)}|${taxonomyKey}`;
-      
+      // The whole reason is part of the cache key: two different reasons that
+      // happen to share a 200-character prefix must never share a result.
+      const reasonHash = `${reason}|${taxonomyKey}`;
+
       let categories: any[];
       let alternatives: any[];
-      
+      let reviewRequired = false;
+
       const cached = resultCache.get(reasonHash);
       if (cached) {
         categories = cached.categories;
         alternatives = cached.alternatives;
+        reviewRequired = cached.reviewRequired;
       } else {
         try {
           const result = await classifyWithRetry(provider, reason, getTaxonomyContext(), timeoutMs);
-          const adapted = adaptCloudResult(result) as any;
-          categories = (adapted.categories ?? []).map((c: any) => ({
-            categoryId: c.categoryId,
-            points: pointsFor(c.categoryId, this.db),
-            evidence: c.evidence ?? [],
+          const sanitized = sanitizeCloudResult(result, (id) => validCategoryIds.has(id));
+          if (sanitized.rejectedCategoryIds.length > 0) {
+            log('warn', 'cloud.categories_rejected', {
+              ticketId: ticket.ticketId,
+              rejected: sanitized.rejectedCategoryIds.slice(0, 10),
+            });
+          }
+          categories = sanitized.categories.map((category) => ({
+            categoryId: category.categoryId as CategoryId,
+            points: pointsFor(category.categoryId as CategoryId, this.db),
+            evidence: category.evidence,
             method: 'cloud' as const,
-            confidence: c.confidence ?? 0,
+            confidence: category.confidence,
           }));
-          alternatives = (adapted.alternatives as any[]) ?? [];
-          
+          alternatives = sanitized.alternatives;
+          reviewRequired = sanitized.reviewRequired;
+
           if (categories.length > 0) {
-            resultCache.set(reasonHash, { categories, alternatives });
+            resultCache.set(reasonHash, { categories, alternatives, reviewRequired });
           }
         } catch (error) {
           const typed = error as Error & { quotaExhausted?: boolean; cause?: string };
@@ -569,16 +593,24 @@ export class AssessmentService {
         basePoints,
       );
 
-      const reviewReasons = [...new Set(assessment.reviewReasons ?? [])];
+      // A valid cloud classification answers the classification question itself,
+      // so the deterministic fallback and low-confidence reasons no longer
+      // apply. Attribution problems are recomputed from the ticket, which keeps
+      // Rule E items visible instead of dismissing them as if they were solved.
+      const classificationReviewReasons = reviewRequired
+        ? ['Cloud AI requested human review before accepting this classification.']
+        : [];
       const newAssessment = this.buildStoredAssessment({
         ticket,
         categories,
-        fallback: assessment.fallback,
+        fallback: false,
         method: 'cloud',
-        confidence: categories[0]?.confidence ?? 0,
-        explanation: 'Cloud semantic reclassification.',
+        confidence: categories[0]?.confidence ?? null,
+        explanation: reviewRequired
+          ? 'Cloud semantic reclassification (the provider requested human review).'
+          : 'Cloud semantic reclassification.',
         alternatives,
-        classificationReviewReasons: reviewReasons,
+        classificationReviewReasons,
         unresolvedPortion: null,
         model: settings.cloudModel,
         humanCorrected: false,
@@ -615,8 +647,13 @@ export class AssessmentService {
           this.db.saveAssessment(update.assessment);
           if (update.assessment.reviewReasons.length === 0) {
             this.db.setReviewReasons(update.ticketId, []);
+            this.db.resolveReview(update.ticketId, 'dismissed', 'Cloud AI reclassification succeeded.');
+          } else {
+            // Unresolved staff attribution (Rule E) stays visible: the item keeps
+            // its reasons and remains in the review queue until a manager
+            // dismisses it. It must never be resolved by a successful model call.
+            this.db.ensureReview(update.ticketId, update.assessment.reviewReasons);
           }
-          this.db.resolveReview(update.ticketId, 'dismissed', 'Cloud AI reclassification succeeded.');
           this.db.addReviewHistory(
             update.ticketId,
             'reassessed',

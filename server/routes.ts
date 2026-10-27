@@ -13,11 +13,14 @@ import {
   APP_VERSION,
   BACKUP_DIR,
   CLASSIFIER_VERSION,
+  CLOUD_PROVIDER_BASE_URL,
   DATA_DIR,
   DB_PATH,
   EXPORT_DIR,
+  MISSING_IDS_MAX_WINDOW,
   PROFILE_DIR,
   TAXONOMY_VERSION,
+  resolveApprovedCloudBaseUrl,
 } from './config.js';
 import { Db } from './db.js';
 import type { ConnectionManager } from './connection.js';
@@ -58,6 +61,34 @@ const asyncRoute =
 
 let modelCache: { at: number; status: ModelStatus } | null = null;
 
+/**
+ * The runtime type each writable setting must actually have. TypeScript types
+ * do not exist at runtime, so a JSON body can carry "false", {} or [] for a
+ * boolean setting; those are rejected instead of being coerced unpredictably.
+ */
+// aiMode is deliberately absent: it has its own enum-validated route
+// (POST /ai/mode) and must not be writable through this endpoint.
+const SETTING_TYPES: Record<Exclude<keyof AppSettings, 'aiMode'>, 'string' | 'number' | 'boolean'> = {
+  dashboardUrl: 'string',
+  guildId: 'string',
+  ollamaUrl: 'string',
+  model: 'string',
+  modelTimeoutMs: 'number',
+  semanticEnabled: 'boolean',
+  fuzzyThreshold: 'number',
+  requestDelayMs: 'number',
+  classificationEnabled: 'boolean',
+  autoReuseSession: 'boolean',
+  maxRetries: 'number',
+  navigationTimeoutMs: 'number',
+  fetchConcurrency: 'number',
+  cloudProviderUrl: 'string',
+  cloudApiKey: 'string',
+  cloudModel: 'string',
+  cloudTimeoutMs: 'number',
+  cloudMaxWorkers: 'number',
+};
+
 async function getModelStatus(db: Db, force = false): Promise<ModelStatus> {
   const settings = db.getSettings();
   if (!force && modelCache && Date.now() - modelCache.at < 10_000 && modelCache.status.selectedModel === settings.model) {
@@ -67,6 +98,31 @@ async function getModelStatus(db: Db, force = false): Promise<ModelStatus> {
   const status = await client.status();
   modelCache = { at: Date.now(), status };
   return status;
+}
+
+/**
+ * Cloud reclassification failures that the caller can act on are reported as
+ * client errors naming the cause, instead of a generic internal error.
+ */
+function toCloudHttpError(error: unknown): HttpError {
+  const message = error instanceof Error ? error.message : 'Unexpected cloud error.';
+  if (message === 'CLOUD_ENDPOINT_NOT_APPROVED') {
+    return new HttpError(
+      400,
+      'CLOUD_ENDPOINT_NOT_APPROVED',
+      `The cloud endpoint must be the approved OpenRouter destination (${CLOUD_PROVIDER_BASE_URL}).`,
+    );
+  }
+  if (/cloud provider is not configured/i.test(message)) {
+    return new HttpError(400, 'CLOUD_NOT_CONFIGURED', message);
+  }
+  if (error instanceof HttpError) return error;
+  log('warn', 'cloud.review_failed', { message: message.slice(0, 300) });
+  return new HttpError(
+    500,
+    'CLOUD_REVIEW_FAILED',
+    'The cloud review could not be completed. Check diagnostics for details.',
+  );
 }
 
 function browserInstalled(): boolean {
@@ -392,8 +448,10 @@ export function createApiRouter(deps: {
   });
 
   router.get('/taxonomy/audit', (req, res) => {
+    // A negative or non-integer limit used to reach SQLite as LIMIT -1 ("no
+    // limit") or a non-integer ("datatype mismatch"); the repository clamps it.
     const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
-    res.json(db.listTaxonomyAudit(Number.isFinite(limit) ? Math.min(limit, 100) : 20));
+    res.json(db.listTaxonomyAudit(limit));
   });
 
   router.delete('/taxonomy/custom-categories/:id', (req, res) => {
@@ -648,15 +706,52 @@ export function createApiRouter(deps: {
     });
   });
 
-  router.get('/tickets/missing-ids', (req, res) => {
-    const start = typeof req.query.start === 'string' ? req.query.start.trim() : '';
-    const end = typeof req.query.end === 'string' ? req.query.end.trim() : '';
-    if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) {
-      res.status(400).json({ error: 'start and end must be numeric ticket IDs.' });
-      return;
+  // The interval report is derived from the local collection only: an ID with
+  // no local record is "not collected", which is not the same as a ticket that
+  // does not exist on the dashboard. It validates the interval with the same
+  // contract as collection and refuses an oversized window instead of quietly
+  // returning an empty list, so the caller can never mistake "nothing to show"
+  // for "nothing is missing".
+  router.get('/tickets/missing-ids', (req, res, next) => {
+    try {
+      const start = typeof req.query.start === 'string' ? req.query.start : '';
+      const end = typeof req.query.end === 'string' ? req.query.end : '';
+      const validation = validateRange(start, end);
+      if (!validation.ok || !validation.startId || !validation.endId) {
+        throw new HttpError(
+          400,
+          'INVALID_ID_RANGE',
+          validation.error ?? 'Enter a valid starting and ending ticket ID.',
+        );
+      }
+      const rangeSize = validation.count ?? 0;
+      if (rangeSize > MISSING_IDS_MAX_WINDOW) {
+        throw new HttpError(
+          400,
+          'ID_RANGE_TOO_LARGE',
+          `This interval contains ${rangeSize.toLocaleString()} ticket IDs. Narrow it to ${MISSING_IDS_MAX_WINDOW.toLocaleString()} IDs or fewer to list the uncollected ones.`,
+        );
+      }
+      const demo = String(req.query.demo ?? '');
+      const demoOnly = demo === 'only';
+      const includeDemo = demo === '1' || demo === 'include';
+      const report = db.getMissingIds(validation.startId, validation.endId, {
+        demoOnly,
+        includeDemo,
+      });
+      res.json({
+        start: validation.startId,
+        end: validation.endId,
+        count: report.missingIds.length,
+        missingIds: report.missingIds,
+        rangeSize: report.rangeSize,
+        collectedInRange: report.collectedInRange,
+        truncated: report.truncated,
+        scope: demoOnly ? 'demo' : includeDemo ? 'all' : 'collection',
+      });
+    } catch (error) {
+      next(error);
     }
-    const missing = db.getMissingIds(start, end);
-    res.json({ start, end, count: missing.length, missingIds: missing });
   });
 
   router.get('/tickets/:ticketId', (req, res, next) => {
@@ -735,7 +830,9 @@ export function createApiRouter(deps: {
   router.post(
     '/assessments/cloud-reclassify',
     asyncRoute(async (_req, res) => {
-      const result = await assessments.reclassifyPendingReviewsWithCloud();
+      const result = await assessments.reclassifyPendingReviewsWithCloud().catch((error: unknown) => {
+        throw toCloudHttpError(error);
+      });
       if (result.quotaExhausted) {
         res.json({
           ...result,
@@ -760,7 +857,20 @@ export function createApiRouter(deps: {
   router.post(
     '/assessments/cloud-retry',
     asyncRoute(async (_req, res) => {
-      const result = await assessments.reclassifyPendingReviewsWithCloud();
+      const result = await assessments.reclassifyPendingReviewsWithCloud().catch((error: unknown) => {
+        throw toCloudHttpError(error);
+      });
+      if (result.quotaExhausted) {
+        res.json({
+          ...result,
+          message:
+            `OpenRouter daily free-model quota is exhausted. ` +
+            `${result.processed.toLocaleString()} item(s) were attempted before the limit was hit; ` +
+            `${result.updated.toLocaleString()} updated, ${result.failed.toLocaleString()} failed. ` +
+            `No further retries will be attempted until quota resets.`,
+        });
+        return;
+      }
       res.json({
         ...result,
         message:
@@ -1042,46 +1152,94 @@ export function createApiRouter(deps: {
   router.put(
     '/settings',
     asyncRoute(async (req, res) => {
-      const input = req.body ?? {};
-      const allowed: Array<keyof AppSettings> = [
-        'dashboardUrl',
-        'guildId',
-        'ollamaUrl',
-        'model',
-        'modelTimeoutMs',
-        'semanticEnabled',
-        'fuzzyThreshold',
-        'requestDelayMs',
-        'classificationEnabled',
-        'autoReuseSession',
-        'maxRetries',
-        'navigationTimeoutMs',
-        'fetchConcurrency',
-        'cloudProviderUrl',
-        'cloudApiKey',
-        'cloudModel',
-        'cloudTimeoutMs',
-        'cloudMaxWorkers',
-      ];
-      const patch: Partial<AppSettings> = {};
-      for (const key of allowed) {
-        if (key in input) (patch as Record<string, unknown>)[key] = input[key];
+      const input = req.body;
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw new HttpError(400, 'INVALID_SETTINGS_BODY', 'Send a JSON object containing the settings to change.');
       }
-      if (Object.keys(patch).length === 0) {
+      const patch: Partial<AppSettings> = {};
+      const rejected: Array<{ key: string; expected: string }> = [];
+      // Counted separately from `patch`: an intentionally blank cloud API key is a
+      // recognised "leave the stored key unchanged" instruction, not an empty body.
+      let recognized = 0;
+      let clearCloudApiKey = false;
+      for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+        if (key === 'clearCloudApiKey') {
+          // The explicit way to remove the stored credential: a blank key means
+          // "keep it", so removal needs its own deliberate instruction.
+          if (typeof value !== 'boolean') {
+            rejected.push({ key, expected: 'boolean' });
+            continue;
+          }
+          recognized += 1;
+          clearCloudApiKey = value;
+          continue;
+        }
+        // Own properties only: "__proto__" and "constructor" must not resolve
+        // through the prototype chain of the lookup table.
+        const expected = Object.prototype.hasOwnProperty.call(SETTING_TYPES, key)
+          ? SETTING_TYPES[key as Exclude<keyof AppSettings, 'aiMode'>]
+          : undefined;
+        if (!expected) continue; // unknown keys are ignored, as before
+        recognized += 1;
+        if (key === 'cloudApiKey') {
+          // An omitted, blank or null replacement means "keep the stored key".
+          if (value === null || value === undefined) continue;
+          if (typeof value !== 'string') {
+            rejected.push({ key, expected });
+            continue;
+          }
+          const trimmed = value.trim();
+          if (trimmed === '') continue;
+          patch.cloudApiKey = trimmed;
+          continue;
+        }
+        if (typeof value !== expected) {
+          rejected.push({ key, expected });
+          continue;
+        }
+        if (expected === 'number' && !Number.isFinite(value as number)) {
+          rejected.push({ key, expected: 'finite number' });
+          continue;
+        }
+        if (expected === 'string' && /^(dashboardUrl|ollamaUrl|cloudProviderUrl)$/.test(key)) {
+          // Validated again in the store; trimming here keeps the error obvious.
+          (patch as Record<string, unknown>)[key] = String(value).trim();
+          continue;
+        }
+        (patch as Record<string, unknown>)[key] = value;
+      }
+      if (rejected.length > 0) {
+        throw new HttpError(
+          400,
+          'INVALID_SETTINGS_TYPE',
+          `These settings were rejected: ${rejected
+            .map((entry) => `${entry.key} must be a ${entry.expected}`)
+            .join('; ')}.`,
+          { rejected },
+        );
+      }
+      if (recognized === 0) {
         throw new HttpError(400, 'NO_SETTINGS', 'No recognized settings were provided.');
       }
-      if (patch.model !== undefined && !String(patch.model).trim()) {
+      if (patch.model !== undefined && !patch.model.trim()) {
         throw new HttpError(400, 'INVALID_MODEL', 'Select a model name or enter one explicitly.');
       }
       let settings: AppSettings;
       try {
-        settings = db.saveSettings(patch);
+        settings = db.saveSettings(patch, { clearCloudApiKey });
       } catch (error) {
         throw new HttpError(400, 'INVALID_SETTINGS', (error as Error).message);
       }
       modelCache = null;
       log('info', 'settings.updated', { keys: Object.keys(patch) });
-      res.json({ settings, message: 'Settings saved.' });
+      res.json({
+        settings: {
+          ...settings,
+          cloudApiKey: undefined,
+          cloudApiKeyConfigured: Boolean(settings.cloudApiKey),
+        },
+        message: 'Settings saved.',
+      });
     }),
   );
 
@@ -1330,16 +1488,41 @@ export function createApiRouter(deps: {
     const rows = db.connection.prepare("SELECT key, value FROM settings").all() as Array<{ key: string; value: string }>;
     const stored = Object.fromEntries(rows.map((row) => [row.key, row.value]));
     const apiKey = stored.cloudApiKey?.trim();
-    const baseUrl = stored.cloudProviderUrl?.trim() || 'https://openrouter.ai/api/v1';
     if (!apiKey) {
       throw new HttpError(400, 'MISSING_API_KEY', 'Set the cloud provider API key in Settings first.');
     }
-    const url = `${baseUrl.replace(/\/$/, '')}/models`;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    // The destination is pinned, so the key cannot be attached to a model-list
+    // request aimed at any other host.
+    const configured = stored.cloudProviderUrl?.trim() ?? '';
+    const baseUrl = configured ? resolveApprovedCloudBaseUrl(configured) : CLOUD_PROVIDER_BASE_URL;
+    if (!baseUrl) {
+      throw new HttpError(
+        400,
+        'CLOUD_ENDPOINT_NOT_APPROVED',
+        `The cloud endpoint must be the approved OpenRouter destination (${CLOUD_PROVIDER_BASE_URL}).`,
+      );
+    }
+    const url = `${baseUrl}/models`;
+    let response: Awaited<ReturnType<typeof fetch>>;
+    try {
+      response = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        // Without a bound this request could hang the UI indefinitely.
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (error) {
+      const name = (error as Error)?.name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        throw new HttpError(504, 'UPSTREAM_TIMEOUT', 'The cloud provider did not answer within 15 seconds.');
+      }
+      throw new HttpError(502, 'UPSTREAM_UNREACHABLE', 'The cloud provider could not be reached.');
+    }
     if (!response.ok) {
       throw new HttpError(502, 'UPSTREAM_ERROR', `OpenRouter responded ${response.status}`);
+    }
+    const declaredLength = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
+      throw new HttpError(502, 'UPSTREAM_TOO_LARGE', 'The provider returned an unexpectedly large model list.');
     }
     const payload = (await response.json()) as Record<string, unknown>;
     const models = Array.isArray((payload.data as Array<Record<string, unknown>>) ?? [])
@@ -1397,31 +1580,65 @@ function fileInside(directory: string, candidate: string): boolean {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
+/** Loopback names this application may be reached through. */
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]', '0:0:0:0:0:0:0:1']);
+
+/** True only when a Host header names the local machine (port optional). */
+export function isLoopbackHost(value: string | undefined): boolean {
+  if (!value) return false;
+  const host = value.trim().toLowerCase();
+  if (!host) return false;
+  const withoutPort = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0]!;
+  return LOOPBACK_HOSTNAMES.has(withoutPort);
+}
+
+/** True only for an http(s) origin that is loopback ("null" is not loopback). */
+export function isLoopbackOrigin(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return LOOPBACK_HOSTNAMES.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Local-only trust boundary.
+ *
+ * - The Host header must name the local machine. This is what stops DNS
+ *   rebinding: a public hostname that resolves to 127.0.0.1 still arrives with
+ *   the attacker's hostname in Host, and is refused (including for reads).
+ * - State-changing requests may not carry a cross-site origin. `Origin: null`
+ *   (sandboxed iframe, data: URL, cross-site redirect) is refused, and a
+ *   malformed origin is refused rather than skipped.
+ * - A request with no Origin header at all is still accepted, so local scripts
+ *   and the packaged launcher keep working; those are not browser CSRF vectors.
+ */
 export function localOriginGuard(req: Request, res: Response, next: NextFunction): void {
+  if (!isLoopbackHost(req.get('host'))) {
+    res.status(403).json({
+      error: {
+        code: 'HOST_NOT_ALLOWED',
+        message: 'TicketsManage only answers requests addressed to the local machine.',
+      },
+    });
+    return;
+  }
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     next();
     return;
   }
   const origin = req.get('origin');
-  if (origin && origin !== 'null') {
-    try {
-      const parsed = new URL(origin);
-      const local =
-        (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') &&
-        (parsed.protocol === 'http:' || parsed.protocol === 'https:');
-      if (!local) {
-        res.status(403).json({
-          error: {
-            code: 'CROSS_ORIGIN_BLOCKED',
-            message: 'Mutating requests are only accepted from the local TicketsManage UI.',
-          },
-        });
-        return;
-      }
-    } catch {
-      res.status(403).json({ error: { code: 'CROSS_ORIGIN_BLOCKED', message: 'Invalid origin.' } });
-      return;
-    }
+  if (origin !== undefined && !isLoopbackOrigin(origin)) {
+    res.status(403).json({
+      error: {
+        code: 'CROSS_ORIGIN_BLOCKED',
+        message: 'Mutating requests are only accepted from the local TicketsManage UI.',
+      },
+    });
+    return;
   }
   next();
 }

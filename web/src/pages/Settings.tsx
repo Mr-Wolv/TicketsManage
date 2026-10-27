@@ -10,8 +10,11 @@ import {
   StatusBadge,
   ToneBadge,
 } from '../components/ui';
-import type { AppSettings, ModelStatus, SettingsResponse, ApprovedReason, CustomCategory, TaxonomyAuditEntry, TaxonomyOverride } from '../types';
+import type { AppSettings, PublicSettings, ModelStatus, SettingsResponse, ApprovedReason, CustomCategory, TaxonomyAuditEntry, TaxonomyOverride } from '../types';
 import { flushSync } from 'react-dom';
+
+/** The only cloud destination the server will send the stored key to. */
+const APPROVED_CLOUD_ENDPOINT = 'https://openrouter.ai/api/v1';
 
 interface BackupEntry {
   file: string;
@@ -22,7 +25,7 @@ interface BackupEntry {
 export function SettingsPage() {
   const { status, refreshStatus, notify, taxonomy } = useApp();
   const [data, setData] = useState<SettingsResponse | null>(null);
-  const [form, setForm] = useState<AppSettings | null>(null);
+  const [form, setForm] = useState<(PublicSettings & { cloudApiKey?: string }) | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -60,7 +63,7 @@ export function SettingsPage() {
         api<{ backups: BackupEntry[] }>('/api/backups'),
       ]);
       setData(settingsResult);
-      setForm(settingsResult.settings);
+      setForm({ ...settingsResult.settings, cloudApiKey: '' });
       setBackups(backupResult.backups);
       setError(null);
     } catch (loadError) {
@@ -113,7 +116,7 @@ export function SettingsPage() {
     void loadTaxonomy();
   }, [loadTaxonomy]);
 
-  const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+  const update = <K extends keyof (PublicSettings & { cloudApiKey?: string })>(key: K, value: (PublicSettings & { cloudApiKey?: string })[K]) => {
     setForm((current) => (current ? { ...current, [key]: value } : current));
   };
 
@@ -125,11 +128,11 @@ export function SettingsPage() {
     setError(null);
     await new Promise((resolve) => setTimeout(resolve, 30));
     try {
-      const result = await api<{ settings: AppSettings; message: string }>('/api/settings', {
+      const result = await api<{ settings: PublicSettings; message: string }>('/api/settings', {
         method: 'PUT',
         body: JSON.stringify(form),
       });
-      setForm(result.settings);
+      setForm({ ...result.settings, cloudApiKey: '' });
       notify(result.message);
       await refreshStatus();
     } catch (saveError) {
@@ -529,7 +532,7 @@ export function SettingsPage() {
 
       <SectionCard
         title="Cloud semantic provider (optional)"
-        description="Use an OpenAI-compatible provider for optional AI-assisted classification. Your API key is stored locally and never sent anywhere except the provider you choose."
+        description="Optional AI-assisted classification through the approved OpenRouter endpoint. Your API key is stored locally and is only ever sent to openrouter.ai."
       >
         <div className="stack">
           <div className="form-grid">
@@ -537,11 +540,11 @@ export function SettingsPage() {
               <span className="field-label">Provider</span>
               <select
                 className="input"
-                value={form.cloudProviderUrl ? 'custom' : 'none'}
+                value={form.cloudProviderUrl ? 'openrouter' : 'none'}
                 onChange={(event) => {
                   const value = event.target.value;
-                  if (value === 'custom') {
-                    update('cloudProviderUrl', 'https://');
+                  if (value === 'openrouter') {
+                    update('cloudProviderUrl', APPROVED_CLOUD_ENDPOINT);
                     update('cloudModel', '');
                   } else {
                     update('cloudProviderUrl', '');
@@ -551,22 +554,20 @@ export function SettingsPage() {
                 }}
               >
                 <option value="none">None (deterministic only)</option>
-                <option value="custom">Custom OpenAI-compatible endpoint</option>
+                <option value="openrouter">OpenRouter (approved endpoint)</option>
               </select>
               <span className="field-hint">
-                Pick a provider below, then enter its base URL, model ID, and API key. For OpenRouter, use the free-model selector to choose a currently free model.
+                The cloud endpoint is fixed to OpenRouter so the stored key can never be sent to another host. Choose a model below, or use the free-model selector.
               </span>
             </label>
             {form.cloudProviderUrl ? (
               <>
                 <label className="field field-wide">
-                  <span className="field-label">Provider base URL</span>
-                  <input
-                    className="input"
-                    value={form.cloudProviderUrl}
-                    onChange={(event) => update('cloudProviderUrl', event.target.value)}
-                    placeholder="https://openrouter.ai/api/v1"
-                  />
+                  <span className="field-label">Provider base URL (fixed)</span>
+                  <input className="input" value={form.cloudProviderUrl} readOnly aria-readonly="true" />
+                  <span className="field-hint">
+                    Pinned to the approved OpenRouter destination. The server rejects any other value, so a saved key cannot be redirected elsewhere.
+                  </span>
                 </label>
                 <label className="field field-wide">
                   <span className="field-label">Model ID</span>
@@ -584,10 +585,45 @@ export function SettingsPage() {
                     type="password"
                     value={form.cloudApiKey}
                     onChange={(event) => update('cloudApiKey', event.target.value)}
-                    placeholder="sk-or-..."
+                    placeholder={form.cloudApiKeyConfigured ? '•••••••••••• (configured — leave blank to keep)' : 'sk-or-...'}
                   />
-                  <span className="field-hint">Stored in local settings only.</span>
+                  <span className="field-hint">
+                    {form.cloudApiKeyConfigured
+                      ? 'A key is already stored locally. Type a new key to replace it, or leave blank and save to keep the current one.'
+                      : 'Stored in local settings only.'}
+                  </span>
                 </label>
+                {form.cloudApiKeyConfigured ? (
+                  <div className="inline-form">
+                    <button
+                      className="button button-ghost button-small"
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={async () => {
+                        setBusy('cloud-key-clear');
+                        setError(null);
+                        try {
+                          const result = await api<{ settings: PublicSettings; message: string }>(
+                            '/api/settings',
+                            { method: 'PUT', body: JSON.stringify({ clearCloudApiKey: true }) },
+                          );
+                          setForm({ ...result.settings, cloudApiKey: '' });
+                          notify('The stored cloud API key was removed.');
+                          await refreshStatus();
+                        } catch (clearError) {
+                          setError(
+                            clearError instanceof Error ? clearError.message : 'Could not remove the stored key.',
+                          );
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                    >
+                      {busy === 'cloud-key-clear' ? 'Removing…' : 'Remove stored key'}
+                    </button>
+                    <span className="field-hint">Deletes the local copy of the key. No other setting is changed.</span>
+                  </div>
+                ) : null}
                 <label className="field field-wide">
                   <span className="field-label">Timeout (ms)</span>
                   <input

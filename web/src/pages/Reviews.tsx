@@ -38,6 +38,7 @@ export function ReviewsPage() {
   const [note, setNote] = useState('');
   const [approveAlias, setApproveAlias] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -160,6 +161,21 @@ export function ReviewsPage() {
     }
   };
 
+  const cloudReclassify = useCallback(async () => {
+    setCloudBusy(true);
+    try {
+      const result = await api<{ message: string; processed: number; updated: number; failed: number }>(
+        '/api/assessments/cloud-reclassify',
+        { method: 'POST' },
+      );
+      notify(result.message);
+    } catch (cloudError) {
+      notify(cloudError instanceof Error ? cloudError.message : 'Cloud reclassify failed.', 'error');
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [notify]);
+
   const exportParams = new URLSearchParams({ status });
   if (demoMode) exportParams.set('demo', 'only');
 
@@ -171,6 +187,9 @@ export function ReviewsPage() {
         description="Fallbacks, disagreements and unresolved attribution stay here until accepted, corrected or dismissed."
         actions={
           <>
+            <button className="button button-primary" onClick={() => void cloudReclassify()} disabled={cloudBusy || busy !== null}>
+              {cloudBusy ? 'Reclassifying…' : 'Cloud reclassify'}
+            </button>
             <button className="button button-ghost" onClick={() => download(`/api/export/reviews?format=json&${exportParams}`)}>
               Export JSON
             </button>

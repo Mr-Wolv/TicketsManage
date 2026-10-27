@@ -83,6 +83,7 @@ async function ensureBuild() {
     const child = spawn('npm', ['run', 'build:web'], {
       cwd: APP_DIR,
       shell: process.platform === 'win32',
+      stdio: 'pipe',
     });
   child.stdout.on('data', (d) => process.stdout.write(d));
   child.stderr.on('data', (d) => process.stderr.write(d));
@@ -98,6 +99,7 @@ async function tryStartOnPort(port) {
       cwd: APP_DIR,
       env: { ...process.env, PORT: String(port) },
       shell: process.platform === 'win32',
+      stdio: 'pipe',
     });
 
     let stderr = '';

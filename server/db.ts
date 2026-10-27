@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { SCHEMA_VERSION } from './config.js';
+import {
+  CLOUD_PROVIDER_BASE_URL,
+  MISSING_IDS_MAX_WINDOW,
+  SCHEMA_VERSION,
+  resolveApprovedCloudBaseUrl,
+} from './config.js';
 import { log } from './logger.js';
 import type {
   AppSettings,
@@ -22,6 +27,22 @@ import type {
 import { TAXONOMY } from './classifier/taxonomy.js';
 
 type Row = Record<string, unknown>;
+
+/**
+ * Upper bound for a requested page. Combined with the maximum page size of 200
+ * this keeps every OFFSET well inside SQLite's 64-bit integer range, so a
+ * hostile `?page=` value can never reach the driver as an unrepresentable
+ * number (which raises a "datatype mismatch" error).
+ */
+const MAX_PAGE = 1_000_000;
+
+/**
+ * Escape SQL LIKE wildcards so a user's search text matches literally.
+ * Without this a search for "50%" would behave like a prefix wildcard.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   dashboardUrl:
@@ -475,7 +496,11 @@ export class Db {
         stored.fetchConcurrency === undefined
           ? DEFAULT_SETTINGS.fetchConcurrency
           : Number(stored.fetchConcurrency),
-      cloudProviderUrl: stored.cloudProviderUrl ?? DEFAULT_SETTINGS.cloudProviderUrl,
+      // Report the approved endpoint that is actually in effect; a stored value
+      // from an older release that no longer qualifies stays visible as stored.
+      cloudProviderUrl:
+        resolveApprovedCloudBaseUrl(stored.cloudProviderUrl) ??
+        (stored.cloudProviderUrl ?? DEFAULT_SETTINGS.cloudProviderUrl),
       cloudApiKey: stored.cloudApiKey ?? DEFAULT_SETTINGS.cloudApiKey,
       cloudModel: stored.cloudModel ?? DEFAULT_SETTINGS.cloudModel,
       cloudTimeoutMs:
@@ -489,7 +514,10 @@ export class Db {
     };
   }
 
-  saveSettings(patch: Partial<AppSettings>): AppSettings {
+  saveSettings(
+    patch: Partial<AppSettings>,
+    options: { clearCloudApiKey?: boolean } = {},
+  ): AppSettings {
     const current = this.getSettings();
     const next: AppSettings = { ...current, ...patch };
     if (!/^https?:\/\//.test(next.dashboardUrl)) {
@@ -501,8 +529,16 @@ export class Db {
     if (!/^https?:\/\//.test(next.ollamaUrl)) {
       throw new Error('Ollama URL must start with http:// or https://');
     }
-    if (next.cloudProviderUrl && !/^https?:\/\//.test(next.cloudProviderUrl)) {
-      throw new Error('Cloud provider URL must start with http:// or https://');
+    // The cloud endpoint is pinned: only the approved OpenRouter destination may
+    // be stored, so the saved API key can never be pointed at another host.
+    if (next.cloudProviderUrl) {
+      const approved = resolveApprovedCloudBaseUrl(next.cloudProviderUrl);
+      if (!approved) {
+        throw new Error(
+          `Cloud provider must be the approved OpenRouter endpoint (${CLOUD_PROVIDER_BASE_URL}).`,
+        );
+      }
+      next.cloudProviderUrl = approved;
     }
     next.fuzzyThreshold = Math.min(0.98, Math.max(0.5, Number(next.fuzzyThreshold) || 0.82));
     next.requestDelayMs = Math.min(10000, Math.max(0, Number(next.requestDelayMs) || 0));
@@ -527,11 +563,23 @@ export class Db {
       50,
       Math.max(1, Number(next.cloudMaxWorkers) || DEFAULT_SETTINGS.cloudMaxWorkers),
     );
+    // A blank, null or non-string replacement must never erase a stored key:
+    // "leave unchanged" is the documented meaning of an empty cloudApiKey.
+    // Removing the credential is a separate, explicit instruction.
+    const providedKey: unknown = patch.cloudApiKey;
+    next.cloudApiKey = options.clearCloudApiKey
+      ? ''
+      : typeof providedKey === 'string' && providedKey.trim() !== ''
+        ? providedKey.trim()
+        : current.cloudApiKey;
     const stmt = this.connection.prepare(
       'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     );
     for (const [key, value] of Object.entries(next)) stmt.run(key, String(value));
-    return next;
+    // Return what was actually persisted (and re-read into its declared types),
+    // never the raw patch: a rejected or clamped value must not be echoed as if
+    // it had been applied.
+    return this.getSettings();
   }
 
   // ---- tickets ------------------------------------------------------------
@@ -835,52 +883,100 @@ export class Db {
     };
   }
 
-  getMissingIds(start: string, end: string): string[] {
-    if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) return [];
+  /**
+   * Ticket IDs inside the inclusive interval [start, end] that have no local
+   * ticket record, plus the counts the UI needs to describe the interval.
+   *
+   * This is derived presentation data: it never writes to the database, so a
+   * gap can never become a fake ticket, assessment or score. "Missing" here
+   * means "not in the local collection" and nothing more — the dashboard may
+   * still know about the ticket, and the response is worded accordingly.
+   *
+   * Everything is computed with BigInt/decimal string arithmetic. Casting an ID
+   * to a JS number would round it above Number.MAX_SAFE_INTEGER, and casting the
+   * stored text to SQLite INTEGER would round it too, so the SQL predicate
+   * compares the stored decimal text by (length, value) instead. That is exact
+   * for canonical IDs and safely ignores non-numeric or zero-padded values,
+   * which the collector never stores in the first place.
+   */
+  getMissingIds(
+    start: string,
+    end: string,
+    options: { demoOnly?: boolean; includeDemo?: boolean } = {},
+  ): { missingIds: string[]; rangeSize: number; collectedInRange: number; truncated: boolean } {
+    const empty = { missingIds: [], rangeSize: 0, collectedInRange: 0, truncated: false };
+    if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) return empty;
     const s = BigInt(start);
     const e = BigInt(end);
-    if (s > e) return [];
-    const rangeSize = Number(e - s + 1n);
-    if (rangeSize > 10000) return []; // Safety limit: don't generate massive sequences
+    if (s > e) return empty;
 
-    const existing = new Set(
-      this.connection
-        .prepare(
-          `SELECT CAST(ticket_id AS TEXT) AS ticket_id FROM tickets WHERE CAST(ticket_id AS INTEGER) BETWEEN ? AND ?`,
-        )
-        .all(Number(s), Number(e))
-        .map((row: Row) => String(row.ticket_id)),
-    );
+    const limit = BigInt(MISSING_IDS_MAX_WINDOW);
+    const windowSize = e - s + 1n;
+    const truncated = windowSize > limit;
+    const scanEnd = truncated ? s + limit - 1n : e;
 
-    const missing: string[] = [];
-    let current = s;
-    while (current <= e) {
+    // Same demo scoping rules as the ticket list, so the report describes
+    // exactly the rows the explorer is showing.
+    const scope = options.demoOnly ? 'is_demo = 1' : options.includeDemo ? '1=1' : 'is_demo = 0';
+    const rows = this.connection
+      .prepare(
+        `SELECT ticket_id FROM tickets
+          WHERE ${scope}
+            AND ticket_id GLOB '[0-9]*'
+            AND NOT ticket_id GLOB '*[^0-9]*'
+            AND (LENGTH(ticket_id) > LENGTH(:start)
+                 OR (LENGTH(ticket_id) = LENGTH(:start) AND ticket_id >= :start))
+            AND (LENGTH(ticket_id) < LENGTH(:end)
+                 OR (LENGTH(ticket_id) = LENGTH(:end) AND ticket_id <= :end))`,
+      )
+      .all({ start, end: String(scanEnd) }) as Row[];
+    const existing = new Set(rows.map((row) => String(row.ticket_id)));
+
+    const missingIds: string[] = [];
+    for (let current = s; current <= scanEnd; current += 1n) {
       const id = String(current);
-      if (!existing.has(id)) missing.push(id);
-      current += 1n;
+      if (!existing.has(id)) missingIds.push(id);
     }
-    return missing;
+
+    return {
+      missingIds,
+      rangeSize: truncated ? MISSING_IDS_MAX_WINDOW : Number(windowSize),
+      collectedInRange: existing.size,
+      truncated,
+    };
   }
 
   listTickets(filters: TicketListFilters = {}): { items: TicketRecord[]; total: number; page: number; pageSize: number } {
-    const page = Math.max(1, filters.page ?? 1);
-    const pageSize = Math.min(200, Math.max(5, filters.pageSize ?? 25));
+    // SQLite raises "datatype mismatch" for a non-integer LIMIT/OFFSET and
+    // treats a negative LIMIT as "no limit at all", so paging values are
+    // normalised to a safe integer range before they are bound. A value that
+    // cannot be parsed falls back to the first page instead of failing.
+    const requestedPage = Math.trunc(Number(filters.page));
+    const requestedPageSize = Math.trunc(Number(filters.pageSize));
+    const page =
+      Number.isFinite(requestedPage) && requestedPage > 0
+        ? Math.min(requestedPage, MAX_PAGE)
+        : 1;
+    const pageSize = Number.isFinite(requestedPageSize)
+      ? Math.min(200, Math.max(5, requestedPageSize))
+      : 25;
     const where: string[] = [];
     const params: unknown[] = [];
     if (filters.demoOnly) where.push('t.is_demo = 1');
     else if (!filters.includeDemo) where.push('t.is_demo = 0');
     if (filters.search) {
       where.push(
-        `(t.ticket_id LIKE ? OR IFNULL(t.opener_username,'') LIKE ? OR IFNULL(t.claimed_by_name,'') LIKE ? OR IFNULL(t.closed_by_name,'') LIKE ? OR IFNULL(t.close_reason,'') LIKE ?)`,
+        `(t.ticket_id LIKE ? ESCAPE '\\' OR IFNULL(t.opener_username,'') LIKE ? ESCAPE '\\' OR IFNULL(t.claimed_by_name,'') LIKE ? ESCAPE '\\' OR IFNULL(t.closed_by_name,'') LIKE ? ESCAPE '\\' OR IFNULL(t.close_reason,'') LIKE ? ESCAPE '\\')`,
       );
-      const term = `%${filters.search}%`;
+      const term = `%${escapeLikePattern(filters.search)}%`;
       params.push(term, term, term, term, term);
     }
     if (filters.staff) {
       where.push(
-        `(t.claimed_by_id = ? OR t.closed_by_id = ? OR a.credit_staff_id = ? OR t.claimed_by_name LIKE ? OR t.closed_by_name LIKE ? OR a.credit_staff_name LIKE ?)`,
+        `(t.claimed_by_id = ? OR t.closed_by_id = ? OR a.credit_staff_id = ? OR t.claimed_by_name LIKE ? ESCAPE '\\' OR t.closed_by_name LIKE ? ESCAPE '\\' OR a.credit_staff_name LIKE ? ESCAPE '\\')`,
       );
-      params.push(filters.staff, filters.staff, filters.staff, `%${filters.staff}%`, `%${filters.staff}%`, `%${filters.staff}%`);
+      const staffTerm = `%${escapeLikePattern(filters.staff)}%`;
+      params.push(filters.staff, filters.staff, filters.staff, staffTerm, staffTerm, staffTerm);
     }
     if (filters.category) {
       where.push(`a.category_ids_json LIKE ?`);
@@ -1382,9 +1478,11 @@ export class Db {
   }
 
   listTaxonomyAudit(limit = 100): Array<{ id: number; action: string; entityType: string; entityId: string; oldValue: string | null; newValue: string | null; note: string; changedAt: string }> {
+    const requested = Math.trunc(Number(limit));
+    const safeLimit = Number.isFinite(requested) ? Math.min(100, Math.max(1, requested)) : 20;
     return this.connection
       .prepare('SELECT * FROM taxonomy_audit_log ORDER BY id DESC LIMIT ?')
-      .all(limit)
+      .all(safeLimit)
       .map((row) => ({
         id: Number(row.id),
         action: String(row.action),

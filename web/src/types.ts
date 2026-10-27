@@ -412,8 +412,31 @@ export interface AppSettings {
   cloudMaxWorkers: number;
 }
 
+/** Public-safe settings returned to the browser. Secrets are replaced with presence flags. */
+export interface PublicSettings {
+  dashboardUrl: string;
+  guildId: string;
+  ollamaUrl: string;
+  model: string;
+  modelTimeoutMs: number;
+  semanticEnabled: boolean;
+  aiMode?: 'deterministic' | 'shadow' | 'production';
+  fuzzyThreshold: number;
+  requestDelayMs: number;
+  classificationEnabled: boolean;
+  autoReuseSession: boolean;
+  maxRetries: number;
+  navigationTimeoutMs: number;
+  fetchConcurrency: number;
+  cloudProviderUrl: string;
+  cloudApiKeyConfigured: boolean;
+  cloudModel: string;
+  cloudTimeoutMs: number;
+  cloudMaxWorkers: number;
+}
+
 export interface SettingsResponse {
-  settings: AppSettings;
+  settings: PublicSettings;
   meta: {
     appVersion: string;
     taxonomyVersion: string;

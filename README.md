@@ -78,7 +78,8 @@ Corrections are stored in SQLite, appear in the correction history, and survive 
 ### 5. Reports and exports
 
 - **Staff performance** shows base points, staff-credit outcomes, category breakdowns, ratings, and ticket drill-downs. Filter by **ticket ID start/end** to scope the report to a collected range. **Rescore stored results** and **Reclassify outdated** run without reopening the dashboard.
-- **Ticket explorer** filters by staff, category, fallback, review status, collection status, and ticket ID range. Missing IDs in the selected range are shown with a **missing** tag.
+- **Ticket explorer** filters by staff, category, fallback, review status, collection status, and ticket ID range. Enter a start and end ID and it also lists the IDs in that inclusive interval that have **no local record**, each tagged **Not collected**, with a count of how many of the interval's IDs are collected and an explicit empty state when there are none, none are collected, or the interval itself is unusable. These markers are derived from the local collection: an ID they flag may still exist on the dashboard, so the wording never claims a ticket does not exist. They are presentation only — no ticket, assessment, review or score is created for a gap.
+- The missing-ID report covers intervals of up to **10,000 IDs** in one request. A wider interval is refused with a readable explanation instead of a silently empty list, and at most the first 200 markers are drawn at once (with a note pointing to the rest) so a wide interval cannot flood the page.
 - **Export JSON** and **Export CSV** write to `data/exports`. CSV cells are RFC 4180 quoted and text beginning with `=`, `+`, `-`, `@`, tab, or carriage return is neutralised against spreadsheet formulas. Unavailable values export as empty cells, not zero.
 
 ---
@@ -155,8 +156,13 @@ SQLite is Node's built-in `node:sqlite`; there is no native module to compile. T
 ### Security and privacy
 
 - Binds to `127.0.0.1`; no LAN exposure.
-- Same-origin guard on all state-changing API requests; no CORS wildcard.
-- CSP, `nosniff`, `DENY` framing, `no-referrer`, and `no-store` on API responses.
+- Every `/api` request must carry a loopback `Host` header. A public hostname that resolves to `127.0.0.1` (DNS rebinding) is refused with `403 HOST_NOT_ALLOWED`, reads included.
+- State-changing requests must not carry a cross-site origin; `Origin: null` (sandboxed iframe, `data:` URL) is refused as well. Requests with no Origin header at all are still accepted, so local scripts and the packaged launcher keep working.
+- `POST /api/settings` accepts only the declared runtime type of each setting: `"false"`, `[]`, `{}` and numeric strings are rejected with `400 INVALID_SETTINGS_TYPE` instead of being coerced. A blank, omitted or non-string cloud API key means "leave the stored key unchanged"; removing the credential is a deliberate action (`clearCloudApiKey: true`, the **Remove stored key** button in Settings).
+- The cloud destination is pinned to OpenRouter (`https://openrouter.ai/api/v1`). The endpoint is validated when settings are saved and again at the point of use, so the stored API key is never attached to a request aimed at another host, even if a settings row was written outside the API.
+- Cloud/AI provider responses are untrusted input: category IDs are checked against the taxonomy, duplicates are collapsed, and confidence, evidence and text fields are bounded before anything is stored. A response that invents categories is discarded and the ticket stays in Review. Ticket text is serialised as JSON in the prompt, so a reason containing `</reason>` or a forged header cannot leave the untrusted-data boundary.
+- CSP, `nosniff`, `DENY` framing, `no-referrer`, `same-origin` resource policy, and `no-store` on API responses. CORS echoes the caller's origin only when that origin is loopback, so no malformed `Access-Control-Allow-Origin` value is ever sent.
+- Malformed and oversized request bodies are reported as `400 INVALID_REQUEST_BODY` / `413 BODY_TOO_LARGE`; the rejected body is never written to the log.
 - During offline evaluation, ticket text is treated as untrusted data in the model prompt and the model's output is schema-validated. Live tickets are never sent to the model.
 - No Discord token or password is extracted, logged, or stored. The persistent Chromium profile is the session.
 - Only the local Ollama endpoint is used; cloud model tags are rejected.
@@ -164,7 +170,7 @@ SQLite is Node's built-in `node:sqlite`; there is no native module to compile. T
 
 ### REST API (local only)
 
-`GET /api/health`, `/api/taxonomy`, `/api/connection`, `/api/collection/status`, `/api/tickets`, `/api/tickets/:id`, `/api/staff`, `/api/reviews`, `/api/settings`, `/api/backups`, `/api/export/*`.
+`GET /api/health`, `/api/taxonomy`, `/api/connection`, `/api/collection/status`, `/api/tickets`, `/api/tickets/missing-ids?start=&end=`, `/api/tickets/:id`, `/api/staff`, `/api/reviews`, `/api/settings`, `/api/backups`, `/api/export/*`.
 
 State-changing routes include `/api/connection/*`, `/api/collection/*`, `/api/reviews/:id/*`, `/api/demo/*`, `/api/settings`, `/api/backups/*`, and `/api/classifier/test`.
 
@@ -176,7 +182,9 @@ Implemented and locally verified:
 
 - TypeScript server and web typechecks.
 - Production UI build.
-- **109 automated tests in 7 files** across taxonomy, scoring, classifier, collector parsing, claim inference, CSV, range validation, SQLite persistence, review lifecycle, and end-to-end assessment.
+- **204 automated tests in 16 files** across taxonomy, scoring, classifier, collector parsing, claim inference, CSV, range validation, SQLite persistence, review lifecycle, end-to-end assessment, and the missing-ID interval report.
+- The missing-ID report is covered by `tests/missing-ids.test.ts` (14 tests) against the real app over HTTP: fully collected intervals, internal gaps, missing boundaries, an empty collection, single-ID intervals, sparse and noncontiguous IDs, inclusive boundaries, numeric (never lexicographic) ordering, IDs beyond `Number.MAX_SAFE_INTEGER` staying exact, real/demo scoping, malformed and reversed intervals, an oversized interval, and the guarantee that computing the report writes no ticket, assessment, review or run.
+- An adversarial suite (`tests/adversarial.test.ts`, 50 tests) attacks the application's own trust boundaries: non-loopback `Host` and `Origin: null` requests, malformed and oversized bodies, settings type confusion (`"false"` for a boolean, `null` for the API key, prototype-sensitive keys), credential lifecycle, a stored cloud endpoint aimed at another host, prompt-injection text containing closing delimiters, non-numeric and negative paging values, `LIKE` wildcards in search, provider responses that invent category IDs or return 200 KB of junk, review items whose staff attribution is still unresolved, unsupported export formats, and exports of records holding an unknown category ID.
 - Rules-only corpus: **62 reasons**, 55 with scored labels, 7 expected fallbacks. All 55 exact category sets matched, micro precision/recall/F1 100%, and all 7 expected fallbacks were produced. The corpus includes Arabic, Egyptian Arabic, Arabizi, English, multi-label reasons, negations, staff-failure distractors, Recharge positives/negatives, and a foreign staff-application reason that must fall back.
 - **Live dashboard collection** against the real Tickets dashboard on 2026-10-24, range **7770–7778**: 9 requested, **8 collected with transcripts**, **1 not found** (#7774), **0 failures**. Pause/resume was not needed in that run; checkpoints and retries are covered by tests.
 - **Final benchmark closure** on 2026-10-25: the 7474–7747 range was extended with **174/174** tickets from **7300–7473** to capture tickets opened before 7474 but active during 17–23 October. The expanded activity window contains **275 tickets** and **606.5 points**. The 18 added tickets are worth **35.5 points**; they move Xmax to **66.5 vs 67** manual and Sheroo to **36 vs 38**, but push Henry to **330.5 vs 319**. See [docs/FINAL-ACCEPTANCE.md](docs/FINAL-ACCEPTANCE.md) and [docs/BENCHMARK-7474-7747.md](docs/BENCHMARK-7474-7747.md).
@@ -237,5 +245,13 @@ npm run dev:server   # API with watch mode
 | `RATE_LIMITED` | Wait 1–2 minutes, keep request delay at **2,000 ms**, then Resume |
 | Staff totals differ from a hand sheet | Check date basis, local window, donations (not scored), Rule A conflicts, unresolved attribution, and whether older active tickets are outside the ID range |
 | CSV opens with formula text | That is intentional protection; the leading apostrophe prevents execution |
+
+### Mobile access scope
+
+The interface uses responsive CSS breakpoints (desktop, tablet, mobile) and is usable on small screens.
+
+However, this release does **not** support a phone connecting to the running instance from another device. The server binds to `127.0.0.1` only. A phone cannot reach `127.0.0.1` on the host machine, and the dashboard/OAuth flow is not configured for non-local callbacks.
+
+A phone can access the interface only if you run the application on the phone itself (for example, via a local Node environment on that device).
 
 Do not delete `data/ticketsmanage.db` while the application is running. Use the UI backup/restore or close the application first.
