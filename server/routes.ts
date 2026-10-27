@@ -736,6 +736,17 @@ export function createApiRouter(deps: {
     '/assessments/cloud-reclassify',
     asyncRoute(async (_req, res) => {
       const result = await assessments.reclassifyPendingReviewsWithCloud();
+      if (result.quotaExhausted) {
+        res.json({
+          ...result,
+          message:
+            `OpenRouter daily free-model quota is exhausted. ` +
+            `${result.processed.toLocaleString()} item(s) were attempted before the limit was hit; ` +
+            `${result.updated.toLocaleString()} updated, ${result.failed.toLocaleString()} failed. ` +
+            `No further retries will be attempted until quota resets.`,
+        });
+        return;
+      }
       res.json({
         ...result,
         message:
@@ -1004,8 +1015,13 @@ export function createApiRouter(deps: {
   // ---- settings and model ----------------------------------------------
 
   router.get('/settings', (_req, res) => {
+    const settings = db.getSettings();
     res.json({
-      settings: db.getSettings(),
+      settings: {
+        ...settings,
+        cloudApiKey: undefined,
+        cloudApiKeyConfigured: Boolean(settings.cloudApiKey),
+      },
       meta: {
         appVersion: APP_VERSION,
         taxonomyVersion: TAXONOMY_VERSION,

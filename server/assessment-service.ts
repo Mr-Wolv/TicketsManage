@@ -5,7 +5,7 @@ import { normalizeReason } from './classifier/normalize.js';
 import { classifyReason } from './classifier/pipeline.js';
 import { isCategoryId, loadUnifiedTaxonomy, pointsFor } from './classifier/taxonomy.js';
 import { applyStaffCredit, basePointsFor } from './scoring.js';
-import { OpenAiCompatibleProvider, adaptCloudResult, buildTaxonomyContext } from './classifier/cloud.js';
+import { OpenAiCompatibleProvider, adaptCloudResult, buildTaxonomyContext, classifyWithRetry } from './classifier/cloud.js';
 import { LRUCache } from './classifier/lru.js';
 import type {
   CategoryAssessment,
@@ -456,7 +456,7 @@ export class AssessmentService {
     return { reclassified, failed };
   }
 
-  async reclassifyPendingReviewsWithCloud(): Promise<{ processed: number; updated: number; failed: number }> {
+  async reclassifyPendingReviewsWithCloud(): Promise<{ processed: number; updated: number; failed: number; quotaExhausted?: boolean; quotaReason?: string }> {
     const settings = this.db.getSettings();
     if (!settings.cloudProviderUrl || !settings.cloudApiKey || !settings.cloudModel) {
       throw new Error('Cloud provider is not configured.');
@@ -507,7 +507,12 @@ export class AssessmentService {
     const timeoutMs = Math.min(settings.cloudTimeoutMs, 10000);
     const updates: Array<{ assessment: any; ticketId: string; oldCategories: string[]; newCategories: string[] }> = [];
 
+    let quotaExhausted = false;
+    let quotaReason = '';
+
     const processOne = async (entry: typeof eligible[number]): Promise<boolean> => {
+      if (quotaExhausted) return false;
+
       const ticket = entry.ticket;
       const assessment = entry.assessment;
       if (!ticket || !assessment) return false;
@@ -524,7 +529,7 @@ export class AssessmentService {
         alternatives = cached.alternatives;
       } else {
         try {
-          const result = await provider.classify(reason, getTaxonomyContext(), timeoutMs);
+          const result = await classifyWithRetry(provider, reason, getTaxonomyContext(), timeoutMs);
           const adapted = adaptCloudResult(result) as any;
           categories = (adapted.categories ?? []).map((c: any) => ({
             categoryId: c.categoryId,
@@ -539,6 +544,11 @@ export class AssessmentService {
             resultCache.set(reasonHash, { categories, alternatives });
           }
         } catch (error) {
+          const typed = error as Error & { quotaExhausted?: boolean; cause?: string };
+          if (typed.quotaExhausted) {
+            quotaExhausted = true;
+            quotaReason = typed.cause ?? 'Daily free-model quota exhausted.';
+          }
           return false;
         }
       }
@@ -618,7 +628,7 @@ export class AssessmentService {
       });
     }
 
-    return { processed, updated, failed: processed - updated };
+    return { processed, updated, failed: processed - updated, quotaExhausted, quotaReason };
   }
 
   listPendingAssessmentIds(limit = 100, includeDemo = false): string[] {

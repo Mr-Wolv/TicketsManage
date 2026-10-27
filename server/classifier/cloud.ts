@@ -47,10 +47,48 @@ export function redactPayload(raw: string): string {
 }
 
 export class CloudSemanticUnavailableError extends Error {
-  constructor(public readonly cause: string) {
+  constructor(public readonly cause: string, public readonly quotaExhausted = false, public readonly quotaReason = '') {
     super(`Cloud semantic unavailable: ${cause}`);
     this.name = 'CloudSemanticUnavailableError';
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function classifyWithRetry(
+  provider: OpenAiCompatibleProvider,
+  reason: string,
+  taxonomyContext: string,
+  timeoutMs: number,
+  maxRetries = 3,
+): Promise<CloudSemanticResult> {
+  let attempt = 0;
+  let backoffMs = 500;
+  let lastError: Error | undefined;
+
+  while (attempt < maxRetries) {
+    try {
+      return await provider.classify(reason, taxonomyContext, timeoutMs);
+    } catch (error) {
+      lastError = error as Error;
+      const typed = lastError as CloudSemanticUnavailableError & { status?: number; retryAfterMs?: number };
+      if (typed.quotaExhausted) {
+        throw lastError;
+      }
+      const status = typed.status;
+      const retryAfter = typed.retryAfterMs;
+      if (status !== undefined && status !== 429 && (status < 500 || status >= 600)) {
+        throw lastError;
+      }
+      attempt += 1;
+      if (attempt >= maxRetries) break;
+      await sleep(retryAfter ?? backoffMs);
+      backoffMs = Math.min(backoffMs * 2, 8000);
+    }
+  }
+  throw lastError ?? new CloudSemanticUnavailableError('Unknown provider error');
 }
 
 export class OpenAiCompatibleProvider implements CloudSemanticProvider {
@@ -96,7 +134,26 @@ export class OpenAiCompatibleProvider implements CloudSemanticProvider {
 
       if (!response.ok) {
         const text = await response.text();
-        throw new CloudSemanticUnavailableError(`Provider responded ${response.status}: ${text.slice(0, 200)}`);
+        const retryAfterMs = response.headers.get('retry-after');
+        let error = new CloudSemanticUnavailableError(`Provider responded ${response.status}: ${text.slice(0, 200)}`) as CloudSemanticUnavailableError & { status: number; retryAfterMs?: number };
+        error.status = response.status;
+        if (retryAfterMs) {
+          const parsed = Number(retryAfterMs);
+          if (!Number.isNaN(parsed)) error.retryAfterMs = parsed * 1000;
+        }
+        if (response.status === 429 && /free-models-per-day/.test(text)) {
+          error = new CloudSemanticUnavailableError(
+            `OpenRouter daily free-model quota exhausted: ${text.slice(0, 200)}`,
+            true,
+            text.slice(0, 200),
+          ) as CloudSemanticUnavailableError & { status: number; retryAfterMs?: number };
+          error.status = response.status;
+          if (retryAfterMs) {
+            const parsed = Number(retryAfterMs);
+            if (!Number.isNaN(parsed)) error.retryAfterMs = parsed * 1000;
+          }
+        }
+        throw error;
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
