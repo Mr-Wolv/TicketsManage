@@ -16,7 +16,7 @@ test.describe('Settings save flow', () => {
     await ollamaInput.fill(testValue);
     await expect(ollamaInput).toHaveValue(testValue);
 
-    const saveButton = page.getByRole('button', { name: 'Save settings' });
+    const saveButton = page.getByRole('button', { name: 'Save settings' }).first();
     await saveButton.click();
 
     await expect(saveButton).toBeEnabled({ timeout: 15000 });

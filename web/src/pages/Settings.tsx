@@ -639,6 +639,13 @@ export function SettingsPage() {
                       ))}
                     </select>
                   ) : null}
+                  <button
+                    className="button button-primary"
+                    onClick={save}
+                    disabled={saving}
+                  >
+                    {saving ? 'Saving…' : 'Save settings'}
+                  </button>
                 </div>
                 {cloudModelError ? (
                   <p className="muted" style={{ color: '#b45309' }}>
