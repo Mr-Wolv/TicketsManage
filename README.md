@@ -4,7 +4,7 @@ A private, local Windows application for collecting closed Tickets v2 records, c
 
 TicketsManage is UI-first. You launch it, sign in to the dashboard in a dedicated browser, enter an inclusive ticket-ID range, and work entirely from the local web interface. Data, the browser profile, corrections, and exports stay on this computer.
 
-> **Start here:** [docs/USER-GUIDE.md](docs/USER-GUIDE.md) covers the complete everyday workflow — Sync vs Full refresh, staff numbers and date windows, exports, backups, resets, and troubleshooting.
+> **Start here:** [docs/USER-GUIDE.md](docs/USER-GUIDE.md) covers the complete everyday workflow — Sync vs Full refresh, staff numbers and ID ranges, exports, backups, resets, and troubleshooting.
 >
 > **Status:** the application, storage, collection pipeline, scoring, review workflow, reports, exports, and tests are implemented. The final QA campaign is recorded in [docs/QA-REPORT.md](docs/QA-REPORT.md), the live 7474–7747 comparison is in [docs/BENCHMARK-7474-7747.md](docs/BENCHMARK-7474-7747.md), and measured collection performance is in [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Live collection has been exercised against the real Tickets dashboard for **7770–7778** (8 tickets with transcripts, 1 ID genuinely not found) and **7474–7747** (272 collected, 2 genuinely not found, 0 failures). Live classification is **deterministic**: known wording and compound reasons are scored immediately, cancellations receive zero, and unfamiliar wording receives an explicit **General problem (fallback)** and a review item. The local Ollama model is installed and self-tested, but it **does not score live tickets**; it is retained for offline evaluation only.
 
@@ -77,8 +77,8 @@ Corrections are stored in SQLite, appear in the correction history, and survive 
 
 ### 5. Reports and exports
 
-- **Staff performance** shows base points, staff-credit outcomes, category breakdowns, ratings, and ticket drill-downs. Choose **Last activity** (close-date proxy) or **Ticket opening time** for the date basis; plain dates use local time. **Rescore stored results** and **Reclassify outdated** run without reopening the dashboard.
-- **Ticket explorer** filters by staff, category, fallback, review status, collection status, and date with the same date-basis semantics.
+- **Staff performance** shows base points, staff-credit outcomes, category breakdowns, ratings, and ticket drill-downs. Filter by **ticket ID start/end** to scope the report to a collected range. **Rescore stored results** and **Reclassify outdated** run without reopening the dashboard.
+- **Ticket explorer** filters by staff, category, fallback, review status, collection status, and ticket ID range. Missing IDs in the selected range are shown with a **missing** tag.
 - **Export JSON** and **Export CSV** write to `data/exports`. CSV cells are RFC 4180 quoted and text beginning with `=`, `+`, `-`, `@`, tab, or carriage return is neutralised against spreadsheet formulas. Unavailable values export as empty cells, not zero.
 
 ---

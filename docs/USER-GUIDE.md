@@ -67,26 +67,23 @@ Raising concurrency without raising the delay does **not** increase throughput; 
 
 Open **Staff performance**.
 
-1. Set **From date** and **To date**.
-2. Choose **Date basis**:
-   - **Last activity (close-date proxy)** — the final transcript message timestamp. The dashboard has no closing timestamp; this is the closest evidence of the day a ticket stopped being active and matches manual day columns much better than opening time.
-   - **Ticket opening time** — the day the ticket was created.
-3. Optionally filter to one staff member.
-4. Read **Awarded staff points** and **Tickets credited**, then use **Export CSV/JSON** for the same filters.
+1. Set **Start ID** and **End ID** to the inclusive ticket-ID range you collected.
+2. Optionally filter to one staff member.
+3. Read **Awarded staff points** and **Tickets credited**, then use **Export CSV/JSON** for the same filters.
 
-Dates are interpreted in the machine's local timezone (for example Africa/Cairo), so `2026-10-17` means local midnight to local 23:59:59.999.
+The report is bounded by the IDs in your local database, not by calendar dates. If you need a narrower view, collect a smaller ID range first.
 
 ### Command-line equivalents
 
 ```bash
-# Staff totals for 17–23 Oct by last activity
-curl -s "http://127.0.0.1:5178/api/staff?from=2026-10-17&to=2026-10-23&dateBasis=activity"
+# Staff totals for collected IDs 7474–7747
+curl -s "http://127.0.0.1:5178/api/staff?idStart=7474&idEnd=7747"
 
 # Same, one staff ID
-curl -s "http://127.0.0.1:5178/api/staff?from=2026-10-17&to=2026-10-23&dateBasis=activity&staff=752978053101256744"
+curl -s "http://127.0.0.1:5178/api/staff?idStart=7474&idEnd=7747&staff=752978053101256744"
 
-# Ticket list with the same window
-curl -s "http://127.0.0.1:5178/api/tickets?from=2026-10-17&to=2026-10-23&dateBasis=activity&pageSize=200"
+# Ticket list with the same range
+curl -s "http://127.0.0.1:5178/api/tickets?idStart=7474&idEnd=7747&pageSize=200"
 ```
 
 Every award is explained ticket by ticket in **Ticket explorer** (staff, category, rule A–E, fallback, review state) and in the exports.
@@ -207,7 +204,7 @@ There is no global “delete all awards” button because awards are derived dat
 | Ticket not found | The dashboard does not have that ID. The app records `not_found`, never a fabricated zero. |
 | Transcript unavailable/restricted | Stored as `no_transcript`/`partial`; not scored as a real ticket. Retried by Sync. |
 | Slow first run | Discovery plus transcripts are network-bound. Later Syncs reuse stored work. |
-| Staff total looks low | Check date basis, local timezone, unresolved attribution, Rule A conflicts, and whether the range covers older active tickets. |
+| Staff total looks low | Check ID range coverage, unresolved attribution, Rule A conflicts, and whether the collected range includes the relevant tickets. |
 | Wrong category | Correct it in Review queue; approve the alias to teach future runs. |
 
 ## 11. What is never done

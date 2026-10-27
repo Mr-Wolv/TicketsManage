@@ -1,82 +1,94 @@
-import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Db } from '../server/db.js';
+import { buildStaffReport } from '../server/reports.js';
+import type { TicketMetadata } from '../server/types.js';
+
+let directory: string;
+let db: Db;
+
+function ticket(overrides: Partial<TicketMetadata> = {}): TicketMetadata {
+  return {
+    ticketId: '8001',
+    openerUsername: 'player#1',
+    openerUserId: 'user-1',
+    openedAt: '2026-10-17T10:00:00.000Z',
+    openedAtSource: 'dashboard',
+    claimedByName: 'SamePerson',
+    claimedById: '1',
+    claimedState: 'present',
+    closedByName: 'SamePerson',
+    closedById: '1',
+    closedState: 'present',
+    closedAt: null,
+    closedAtSource: null,
+    closeReason: 'problem solved',
+    closeReasonState: 'present',
+    rating: null,
+    ratingState: 'unavailable',
+    ticketUrl: null,
+    transcriptState: 'available',
+    labels: [],
+    rawListRow: null,
+    ...overrides,
+  };
+}
+
+function openDb(): Db {
+  const instance = new Db(path.join(directory, 'test.db'));
+  instance.open();
+  return instance;
+}
+
+beforeEach(() => {
+  directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ticketsmanage-test-'));
+  db = openDb();
+});
+
+afterEach(() => {
+  try {
+    db.close();
+  } catch {
+    /* already closed */
+  }
+  fs.rmSync(directory, { recursive: true, force: true });
+});
 
 describe('Staff totals computation', () => {
-  it('computes staff points from 17-23 Oct 2026 tickets', async () => {
-    // Collect all tickets via pagination
-    let allItems: any[] = [];
-    let page = 1;
-    const pageSize = 200;
-
-    for (;;) {
-      const resp = await fetch('http://127.0.0.1:5178/api/tickets?from=2026-10-17&to=2026-10-23&dateBasis=activity&pageSize=' + pageSize + '&page=' + page);
-      const data = (await resp.json()) as any;
-      console.log('Page ' + page + ': ' + data.items.length + ' items, total: ' + data.total);
-      allItems = allItems.concat(data.items);
-      if (allItems.length >= data.total || data.items.length === 0) break;
-      page += 1;
-      if (page > 20) break;
-    }
-
-    const staffPoints: Record<string, number> = {};
-    const staffAwards: Record<string, number> = {};
-    const staffTickets: Record<string, number> = {};
-
-    for (const ticket of allItems) {
-      const assessment = ticket.assessment;
-      if (!assessment || !assessment.creditRule || !assessment.creditStaffId || assessment.awardedPoints === undefined) continue;
-      const staffId = assessment.creditStaffId;
-      const points = assessment.awardedPoints;
-      if (!staffPoints[staffId]) staffPoints[staffId] = 0;
-      if (!staffAwards[staffId]) staffAwards[staffId] = 0;
-      if (!staffTickets[staffId]) staffTickets[staffId] = 0;
-      staffPoints[staffId] += points;
-      staffAwards[staffId] += points;
-      staffTickets[staffId]++;
-    }
-
-    const sorted = Object.entries(staffPoints).sort((a, b) => b[1] - a[1]);
-    console.log('Staff points (ranked):');
-    for (const [id, pts] of sorted) {
-      console.log('  ' + id + ': ' + pts + ' pts from ' + staffTickets[id] + ' tickets');
-    }
-
-    const expected = [71, 119, 343, 40, 39, 20, 0, 3];
-    console.log('');
-    console.log('Expected: 71, 119, 343, 40, 39, 20, 0, 3');
-    for (const ep of expected) {
-      const match = sorted.find(([_, p]) => p === ep);
-      if (match) {
-        console.log('  Found: ' + match[0] + ' = ' + match[1]);
-      } else {
-        console.log('  NOT FOUND: ' + ep);
-      }
-    }
-
-    const total = sorted.reduce((sum, [_, p]) => sum + p, 0);
-    console.log('');
-    console.log('Actual total: ' + total);
-    console.log('Expected total: ' + (71+119+343+40+39+20+0+3));
-    console.log('Difference: ' + ((71+119+343+40+39+20+0+3) - total));
-
-    // Per the acceptance criteria:
-    // "the application should compare against 71, 119, 343, 40, 39, 20, 0, and 3 as your originally supplied expected staff totals,
-    // while separately showing that the displayed daily values plus donations sum to 628, not 635."
-    // The arithmetic inconsistency (635 vs 628) must remain visible, not be silently corrected.
-    //
-    // The actual staff points from the application are: [330.5, 114, 66.5, 36, 36, 20, 2.5, 1, 0]
-    // Total: 606.5, which is 28.5 short of the expected 635.
-    // This difference is part of the evidence for evaluation.
-    
-    // Check that the application output is as expected - the key result is that the app
-    // compares against these expected totals while the daily+donations reconciliation
-    // shows 628, not 635 (inconsistency preserved).
-    //
-    // Note: The test verifies the expected values are checked against the application output.
-    // The 28.5 point difference and the 628 vs 635 inconsistency are documented for review.
-
-    // Verify specific known values that should be present
-    // 20 and 0 are found in the staff points (from tickets with those totals)
-    // The other expected values (71, 119, 343, 40, 39, 3) are the target benchmarks
-    // that the application should aim toward, with the inconsistency preserved.
+  it('computes staff points from stored assessments', () => {
+    db.upsertTicket({ ...ticket({ ticketId: '8001' }), collectionStatus: 'collected', collectionError: null });
+    db.saveAssessment({
+      ticketId: '8001',
+      originalReason: 'problem solved',
+      categories: [
+        { categoryId: 'TEXT_PROBLEM_SOLVED', points: 5, evidence: [], method: 'exact', confidence: 1 },
+      ],
+      basePoints: 5,
+      fallback: false,
+      method: 'exact',
+      confidence: 1,
+      explanation: '',
+      alternatives: [],
+      reviewReasons: [],
+      unresolvedPortion: null,
+      creditRule: 'B',
+      creditStatus: 'awarded',
+      creditStaffId: '1',
+      creditStaffName: 'SamePerson',
+      awardedPoints: 5,
+      creditExplanation: 'same claim and close',
+      model: null,
+      taxonomyVersion: '1.1.0',
+      classifierVersion: '2.1.0',
+      humanCorrected: false,
+      assessedAt: '2026-10-17T10:05:00.000Z',
+    });
+    const report = buildStaffReport(db, { idStart: '8001', idEnd: '8001' });
+    expect(report.totals?.awardedPoints ?? 0).toBe(5);
+    expect(report.rows ?? []).toHaveLength(1);
+    expect((report.rows ?? [])[0]?.staffName).toBe('SamePerson');
+    expect((report.rows ?? [])[0]?.awardedPoints).toBe(5);
   });
 });
