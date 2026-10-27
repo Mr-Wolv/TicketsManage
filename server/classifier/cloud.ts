@@ -7,8 +7,10 @@ export interface CloudSemanticProvider {
 }
 
 export interface CloudSemanticResult {
-  categories: Array<{ id: string; evidence: string; confidence: 'high' | 'medium' | 'low' }>;
+  categories: Array<{ id: string; evidence: string[]; confidence: 'high' | 'medium' | 'low' }>;
   alternative_categories: Array<{ id: string; reason: string }>;
+  category?: string;
+  alternative_category?: string;
   unresolved_portion: string | null;
   review_required: boolean;
   explanation: string;
@@ -68,7 +70,7 @@ export class OpenAiCompatibleProvider implements CloudSemanticProvider {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    const systemPrompt = `You are a support ticket classifier. Return JSON only matching the schema. ${taxonomyContext}`;
+    const systemPrompt = `You are a support ticket classifier. Return JSON only matching this exact schema: {"categories": [{"id": "CATEGORY_ID", "evidence": ["phrase from reason"], "confidence": "high"}], "alternative_categories": [{"id": "ALT_ID", "reason": "why considered"}], "unresolved_portion": null, "review_required": false, "explanation": "why this category"}. Use only the provided category IDs. ${taxonomyContext}`;
 
     try {
       const baseUrl = this.providerUrl.replace(/\/+$/, '').replace(/\/v1\/?$/, '');
@@ -104,16 +106,27 @@ export class OpenAiCompatibleProvider implements CloudSemanticProvider {
         throw new CloudSemanticUnavailableError('Provider returned an empty response.');
       }
 
-      const parsed = JSON.parse(content) as CloudSemanticResult;
-      if (!Array.isArray(parsed.categories) || !Array.isArray(parsed.alternative_categories)) {
-        throw new CloudSemanticUnavailableError('Provider response is missing required arrays.');
-      }
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      const categories = Array.isArray(parsed.categories)
+        ? (parsed.categories as Array<{ id: string; evidence?: string[]; confidence?: 'high' | 'medium' | 'low' }>)
+        : typeof parsed.category === 'string'
+          ? [{ id: parsed.category, evidence: [], confidence: 'medium' as const }]
+          : [];
+      const alternative_categories = Array.isArray(parsed.alternative_categories)
+        ? (parsed.alternative_categories as Array<{ id: string; reason?: string }>)
+        : typeof parsed.alternative_category === 'string'
+          ? [{ id: parsed.alternative_category, reason: '' }]
+          : [];
 
       return {
-        ...parsed,
+        categories,
+        alternative_categories,
+        unresolved_portion: typeof parsed.unresolved_portion === 'string' ? parsed.unresolved_portion : null,
+        review_required: typeof parsed.review_required === 'boolean' ? parsed.review_required : false,
+        explanation: typeof parsed.explanation === 'string' ? parsed.explanation : '',
         model: this.model,
         latencyMs: 0,
-      };
+      } as CloudSemanticResult;
     } catch (error) {
       clearTimeout(timeout);
       if (error instanceof CloudSemanticUnavailableError) {
@@ -128,13 +141,23 @@ export class OpenAiCompatibleProvider implements CloudSemanticProvider {
 }
 
 export function adaptCloudResult(result: CloudSemanticResult): Record<string, unknown> {
+  const categories = Array.isArray(result.categories)
+    ? result.categories
+    : result.category
+      ? [{ id: result.category, evidence: [], confidence: 'medium' }]
+      : [];
+  const alternatives = Array.isArray(result.alternative_categories)
+    ? result.alternative_categories
+    : result.alternative_category
+      ? [{ id: result.alternative_category, reason: '' }]
+      : [];
   return {
-    categories: result.categories.map((category) => ({
+    categories: categories.map((category) => ({
       categoryId: category.id,
       evidence: category.evidence,
       confidence: category.confidence,
     })),
-    alternatives: result.alternative_categories.map((category) => ({
+    alternatives: alternatives.map((category) => ({
       categoryId: category.id,
       reason: category.reason,
     })),
