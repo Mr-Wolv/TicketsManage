@@ -1049,6 +1049,7 @@ export function createApiRouter(deps: {
         'cloudApiKey',
         'cloudModel',
         'cloudTimeoutMs',
+        'cloudMaxWorkers',
       ];
       const patch: Partial<AppSettings> = {};
       for (const key of allowed) {

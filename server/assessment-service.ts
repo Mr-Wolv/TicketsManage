@@ -503,7 +503,7 @@ export class AssessmentService {
     };
 
     const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
-    const workers = 20;
+    const workers = Math.min(Math.max(settings.cloudMaxWorkers, 1), 50);
     const timeoutMs = Math.min(settings.cloudTimeoutMs, 10000);
     const updates: Array<{ assessment: any; ticketId: string; oldCategories: string[]; newCategories: string[] }> = [];
 

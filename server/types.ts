@@ -268,6 +268,7 @@ export interface AppSettings {
   cloudApiKey: string;
   cloudModel: string;
   cloudTimeoutMs: number;
+  cloudMaxWorkers: number;
 }
 
 export interface ApprovedReason {

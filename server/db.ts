@@ -43,6 +43,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   cloudApiKey: '',
   cloudModel: '',
   cloudTimeoutMs: 15000,
+  cloudMaxWorkers: 20,
 };
 
 const json = (value: unknown): string => JSON.stringify(value ?? null);
@@ -485,6 +486,10 @@ export class Db {
         stored.cloudTimeoutMs === undefined
           ? DEFAULT_SETTINGS.cloudTimeoutMs
           : Number(stored.cloudTimeoutMs),
+      cloudMaxWorkers:
+        stored.cloudMaxWorkers === undefined
+          ? DEFAULT_SETTINGS.cloudMaxWorkers
+          : Number(stored.cloudMaxWorkers),
     };
   }
 
@@ -521,6 +526,10 @@ export class Db {
     next.cloudTimeoutMs = Math.min(
       120000,
       Math.max(5000, Number(next.cloudTimeoutMs) || DEFAULT_SETTINGS.cloudTimeoutMs),
+    );
+    next.cloudMaxWorkers = Math.min(
+      50,
+      Math.max(1, Number(next.cloudMaxWorkers) || DEFAULT_SETTINGS.cloudMaxWorkers),
     );
     const stmt = this.connection.prepare(
       'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',

@@ -600,6 +600,19 @@ export function SettingsPage() {
                     onChange={(event) => update('cloudTimeoutMs', Number(event.target.value))}
                   />
                 </label>
+                <label className="field field-wide">
+                  <span className="field-label">Max concurrent cloud requests</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={form.cloudMaxWorkers}
+                    onChange={(event) => update('cloudMaxWorkers', Number(event.target.value))}
+                  />
+                  <span className="field-hint">Higher values process review queues faster, but free-tier providers may rate-limit under load.</span>
+                </label>
                 <div className="inline-form">
                   <button
                     className="button button-secondary"
