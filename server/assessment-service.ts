@@ -606,6 +606,7 @@ export class AssessmentService {
           if (update.assessment.reviewReasons.length === 0) {
             this.db.setReviewReasons(update.ticketId, []);
           }
+          this.db.resolveReview(update.ticketId, 'dismissed', 'Cloud AI reclassification succeeded.');
           this.db.addReviewHistory(
             update.ticketId,
             'reassessed',

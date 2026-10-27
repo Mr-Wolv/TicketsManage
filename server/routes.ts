@@ -748,6 +748,19 @@ export function createApiRouter(deps: {
     }),
   );
 
+  router.post(
+    '/assessments/cloud-retry',
+    asyncRoute(async (_req, res) => {
+      const result = await assessments.reclassifyPendingReviewsWithCloud();
+      res.json({
+        ...result,
+        message:
+          `Retry processed ${result.processed.toLocaleString()} review-worthy ticket(s): ` +
+          `${result.updated.toLocaleString()} updated, ${result.failed.toLocaleString()} failed.`,
+      });
+    }),
+  );
+
   // ---- reviews ----------------------------------------------------------
 
   router.get('/reviews', (req, res) => {
