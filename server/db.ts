@@ -70,10 +70,6 @@ export interface TicketListFilters {
   fallback?: boolean;
   reviewStatus?: string;
   collectionStatus?: string;
-  from?: string;
-  to?: string;
-  /** opened = ticket creation time; activity = last transcript message (close proxy). */
-  dateBasis?: 'opened' | 'activity';
   includeDemo?: boolean;
   demoOnly?: boolean;
   idStart?: string;
@@ -899,18 +895,6 @@ export class Db {
     if (filters.collectionStatus) {
       where.push('t.collection_status = ?');
       params.push(filters.collectionStatus);
-    }
-    const dateExpression =
-      filters.dateBasis === 'activity'
-        ? `COALESCE(t.closed_at, (SELECT MAX(m.timestamp) FROM transcript_messages m WHERE m.ticket_id = t.ticket_id), t.opened_at, t.collected_at)`
-        : `COALESCE(t.closed_at, t.opened_at, t.collected_at)`;
-    if (filters.from) {
-      where.push(`${dateExpression} >= ?`);
-      params.push(filters.from);
-    }
-    if (filters.to) {
-      where.push(`${dateExpression} <= ?`);
-      params.push(filters.to);
     }
     if (filters.idStart && /^\d+$/.test(filters.idStart)) {
       where.push(`CAST(t.ticket_id AS INTEGER) >= ?`);

@@ -81,19 +81,6 @@ function boolQuery(value: unknown): boolean {
   return value === '1' || value === 'true' || value === true;
 }
 
-function normalizeDateFilter(value: unknown, endOfDay: boolean): string | undefined {
-  if (typeof value !== 'string' || !value.trim()) return undefined;
-  const trimmed = value.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    // Interpret a plain date in the machine's local timezone. Egyptian staff
-    // days are local days; treating them as UTC shifted late-night tickets into
-    // the wrong calendar column.
-    const local = new Date(`${trimmed}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`);
-    return Number.isNaN(local.getTime()) ? trimmed : local.toISOString();
-  }
-  return trimmed;
-}
-
 function sanitizeTicket(ticket: TicketRecord, includeMessages = false): Record<string, unknown> {
   const { rawListRow, messages, ...rest } = ticket;
   return {
@@ -942,9 +929,8 @@ export function createApiRouter(deps: {
     const options = {
       includeDemo: boolQuery(req.query.demo),
       demoOnly: req.query.demo === 'only',
-      from: normalizeDateFilter(req.query.from, false),
-      to: normalizeDateFilter(req.query.to, true),
-      dateBasis: req.query.dateBasis === 'activity' ? 'activity' : 'opened',
+      idStart: typeof req.query.idStart === 'string' ? req.query.idStart.trim() : undefined,
+      idEnd: typeof req.query.idEnd === 'string' ? req.query.idEnd.trim() : undefined,
       staff: typeof req.query.staff === 'string' ? req.query.staff : undefined,
     } as const;
     const format = req.query.format === 'csv' ? 'csv' : 'json';
@@ -969,9 +955,8 @@ export function createApiRouter(deps: {
     const filters = {
       includeDemo: boolQuery(req.query.demo),
       demoOnly: req.query.demo === 'only',
-      from: normalizeDateFilter(req.query.from, false),
-      to: normalizeDateFilter(req.query.to, true),
-      dateBasis: req.query.dateBasis === 'activity' ? 'activity' : 'opened',
+      idStart: typeof req.query.idStart === 'string' ? req.query.idStart.trim() : undefined,
+      idEnd: typeof req.query.idEnd === 'string' ? req.query.idEnd.trim() : undefined,
       staff: typeof req.query.staff === 'string' ? req.query.staff : undefined,
     } as const;
     const format = req.query.format === 'csv' ? 'csv' : 'json';

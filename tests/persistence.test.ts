@@ -342,37 +342,21 @@ describe('assessment integration', () => {
   });
 });
 
-describe('date basis and local maintenance', () => {
-  it('filters by last transcript activity when requested', () => {
+describe('ID range filtering', () => {
+  it('filters tickets by numeric ID start and end', () => {
     db.upsertTicket({
-      ...ticket({
-        openedAt: '2026-09-01T10:00:00.000Z',
-        closedAt: null,
-        closedAtSource: null,
-      }),
+      ...ticket({ ticketId: '5001' }),
       collectionStatus: 'collected',
       collectionError: null,
     });
-    db.replaceMessages('5001', [
-      {
-        seq: 0,
-        messageId: 'm1',
-        authorName: 'player#1',
-        authorId: 'user-1',
-        timestamp: '2026-10-18T20:00:00.000Z',
-        content: 'hello',
-        embeds: [],
-        attachments: [],
-        components: [],
-      },
-    ]);
-    const window = {
-      from: '2026-10-17T00:00:00.000Z',
-      to: '2026-10-23T23:59:59.999Z',
-    };
-    expect(db.listTickets({ ...window, dateBasis: 'opened' }).total).toBe(0);
-    expect(db.listTickets({ ...window, dateBasis: 'activity' }).total).toBe(1);
-    expect(db.getTicket('5001')?.lastActivityAt).toBe('2026-10-18T20:00:00.000Z');
+    db.upsertTicket({
+      ...ticket({ ticketId: '5003' }),
+      collectionStatus: 'collected',
+      collectionError: null,
+    });
+    expect(db.listTickets({ idStart: '5001', idEnd: '5002' }).total).toBe(1);
+    expect(db.listTickets({ idStart: '5001', idEnd: '5003' }).total).toBe(2);
+    expect(db.listTickets({ idStart: '5004', idEnd: '5005' }).total).toBe(0);
   });
 
   it('rescoring stored categories never changes a valid same-person award', async () => {

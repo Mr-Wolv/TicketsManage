@@ -8,9 +8,8 @@ import { toCsv, type CsvValue } from './csv.js';
 export interface ExportOptions {
   includeDemo?: boolean;
   demoOnly?: boolean;
-  from?: string;
-  to?: string;
-  dateBasis?: 'opened' | 'activity';
+  idStart?: string;
+  idEnd?: string;
   staff?: string;
 }
 
@@ -23,9 +22,8 @@ function loadAllTickets(db: Db, options: ExportOptions): TicketRecord[] {
       pageSize: 200,
       includeDemo: options.includeDemo,
       demoOnly: options.demoOnly,
-      from: options.from,
-      to: options.to,
-      dateBasis: options.dateBasis,
+      idStart: options.idStart,
+      idEnd: options.idEnd,
       staff: options.staff,
       sort: 'id',
       dir: 'asc',
@@ -123,9 +121,8 @@ export function buildTicketExport(db: Db, options: ExportOptions = {}): Record<s
     includesDemoData: Boolean(options.includeDemo),
     demoOnly: Boolean(options.demoOnly),
     filters: {
-      from: options.from ?? null,
-      to: options.to ?? null,
-      dateBasis: options.dateBasis ?? 'opened',
+      idStart: options.idStart ?? null,
+      idEnd: options.idEnd ?? null,
       staff: options.staff ?? null,
     },
     count: tickets.length,
