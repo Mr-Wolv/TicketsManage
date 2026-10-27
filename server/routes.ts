@@ -22,8 +22,8 @@ import {
 import { Db } from './db.js';
 import type { ConnectionManager } from './connection.js';
 import type { CollectionService } from './collection-service.js';
+import { validateRange, type RangeValidation } from './collection-service.js';
 import type { AssessmentService } from './assessment-service.js';
-import { validateRange, validateDateRange, type RangeValidation, type DateRangeValidation } from './collection-service.js';
 import { OllamaClient, type ModelStatus } from './classifier/ollama.js';
 import { TAXONOMY, TAXONOMY_BY_ID, isCategoryId } from './classifier/taxonomy.js';
 import { buildStaffReport } from './reports.js';
@@ -531,41 +531,7 @@ export function createApiRouter(deps: {
     try {
       const start = String(req.body?.start ?? '');
       const end = String(req.body?.end ?? '');
-      const dateFrom = String(req.body?.dateFrom ?? '');
-      const dateTo = String(req.body?.dateTo ?? '');
-      const dateTimezone = String(req.body?.dateTimezone ?? '');
-      const dateBasis = String(req.body?.dateBasis ?? '');
-      let validation: RangeValidation;
-      let dateValidation: DateRangeValidation | null = null;
-      const hasDateRange = Boolean(dateFrom && dateTo);
-      const hasIdRange = Boolean(start && end);
-
-      if (hasDateRange && !hasIdRange) {
-        dateValidation = validateDateRange(dateFrom, dateTo, dateTimezone, dateBasis);
-        validation = dateValidation.ok
-          ? {
-              ok: true,
-              plan: `Collect tickets whose confirmed closure timestamps fall within ${dateValidation.dateFromDisplay} to ${dateValidation.dateToDisplay} (${dateValidation.dateTimezone}, ${dateValidation.dateBasis}).`,
-              warnings: dateValidation.warnings,
-              count: 0,
-            }
-          : { ok: false, error: dateValidation.error ?? 'Invalid date range.' };
-      } else if (hasIdRange) {
-        validation = validateRange(start, end);
-        if (hasDateRange) {
-          dateValidation = validateDateRange(dateFrom, dateTo, dateTimezone, dateBasis);
-          if (!dateValidation.ok) {
-            validation = { ok: false, error: dateValidation.error ?? 'Invalid date range.' };
-          } else if (validation.ok) {
-            validation = {
-              ...validation,
-              plan: `Collect ticket IDs ${start}–${end} and filter the report to ${dateValidation.dateFromDisplay}–${dateValidation.dateToDisplay} (${dateValidation.dateTimezone}, ${dateValidation.dateBasis}).`,
-            };
-          }
-        }
-      } else {
-        validation = { ok: false, error: 'Provide a ticket ID range or a date range.' };
-      }
+      const validation = validateRange(start, end);
       res.json({
         ...validation,
         connection: connection.status(),
@@ -586,10 +552,6 @@ export function createApiRouter(deps: {
           classify: req.body?.classify === undefined ? db.getSettings().classificationEnabled : Boolean(req.body.classify),
           confirmLarge: Boolean(req.body?.confirmLarge),
           mode: req.body?.mode === 'incremental' ? 'incremental' : 'full',
-          dateFrom: String(req.body?.dateFrom ?? '') || null,
-          dateTo: String(req.body?.dateTo ?? '') || null,
-          dateTimezone: String(req.body?.dateTimezone ?? '') || null,
-          dateBasis: String(req.body?.dateBasis ?? '') || null,
         });
         res.status(202).json({ run });
       } catch (error) {
@@ -600,6 +562,28 @@ export function createApiRouter(deps: {
         }
         if (typed.code === 'RUN_ALREADY_ACTIVE') {
           throw new HttpError(409, typed.code, typed.message, typed.run);
+        }
+        throw error;
+      }
+    }),
+  );
+
+  router.post(
+    '/collection/manual-ids',
+    asyncRoute(async (req, res) => {
+      try {
+        const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map((value) => String(value)) : [];
+        const run = await collection.startManualIds({
+          ids,
+          classify: req.body?.classify === undefined ? db.getSettings().classificationEnabled : Boolean(req.body.classify),
+          mode: req.body?.mode === 'incremental' ? 'incremental' : 'full',
+        });
+        res.status(202).json({ run });
+      } catch (error) {
+        const typed = error as Error & { code?: string; validation?: unknown };
+        if (typed.code === 'INVALID_RANGE') throw new HttpError(400, typed.code, typed.message, typed.validation);
+        if (typed.code === 'RUN_ALREADY_ACTIVE') {
+          throw new HttpError(409, typed.code, typed.message);
         }
         throw error;
       }

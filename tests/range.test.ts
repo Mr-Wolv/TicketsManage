@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateRange, validateDateRange } from '../server/collection-service.js';
+import { validateRange } from '../server/collection-service.js';
 
 describe('ticket range validation', () => {
   it('accepts an inclusive single-ticket range', () => {
@@ -62,36 +62,5 @@ describe('ticket range validation', () => {
     const result = validateRange('1', '99999999');
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/split it into smaller runs/i);
-  });
-});
-
-describe('date range validation', () => {
-  it('accepts a closed-at Africa/Cairo range', () => {
-    const result = validateDateRange('17/10/26', '23/10/26', 'Africa/Cairo', 'closed');
-    expect(result.ok).toBe(true);
-    expect(result.dateFromDisplay).toBe('17/10/26');
-    expect(result.dateToDisplay).toBe('23/10/26');
-    expect(result.dateTimezone).toBe('Africa/Cairo');
-    expect(result.dateBasis).toBe('closed');
-    expect(result.dateTo).toBe('2026-10-23T21:00:00.000Z');
-  });
-
-  it('rejects DD/MM/YYYY format', () => {
-    expect(validateDateRange('17/10/2026', '23/10/2026', 'UTC', 'closed').ok).toBe(false);
-  });
-
-  it('rejects reversed dates', () => {
-    expect(validateDateRange('24/10/26', '23/10/26', 'UTC', 'closed').ok).toBe(false);
-  });
-
-  it('rejects invalid separators', () => {
-    expect(validateDateRange('17-10-26', '23-10-26', 'UTC', 'closed').ok).toBe(false);
-  });
-
-  it('defaults timezone and basis', () => {
-    const result = validateDateRange('01/01/27', '02/01/27', '', '');
-    expect(result.ok).toBe(true);
-    expect(result.dateTimezone).toBe('Africa/Cairo');
-    expect(result.dateBasis).toBe('closed');
   });
 });

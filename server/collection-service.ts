@@ -121,51 +121,6 @@ interface ActiveRun {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-function parseDateInput(value: string): { iso: string; display: string } | null {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
-  if (!match) return null;
-  const day = match[1];
-  const month = match[2];
-  const year = '20' + match[3];
-  const date = new Date(`${year}-${month}-${day}T00:00:00.000`);
-  if (Number.isNaN(date.getTime())) return null;
-  return { iso: date.toISOString(), display: trimmed };
-}
-
-export interface DateRangeValidation {
-  ok: boolean;
-  error?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  dateFromDisplay?: string;
-  dateToDisplay?: string;
-  dateTimezone?: string;
-  dateBasis?: string;
-  warnings?: string[];
-}
-
-export function validateDateRange(
-  fromInput: string,
-  toInput: string,
-  timezone: string,
-  dateBasis: string,
-): DateRangeValidation {
-  const from = parseDateInput(fromInput);
-  const to = parseDateInput(toInput);
-  if (!from || !to) return { ok: false, error: 'Use DD/MM/YY for both dates.' };
-  if (from.iso > to.iso) return { ok: false, error: 'The start date must be before or equal to the end date.' };
-  return {
-    ok: true,
-    dateFrom: from.iso,
-    dateTo: new Date(new Date(to.iso).getTime() + 24 * 60 * 60 * 1000).toISOString(),
-    dateFromDisplay: from.display,
-    dateToDisplay: to.display,
-    dateTimezone: timezone || 'Africa/Cairo',
-    dateBasis: dateBasis || 'closed',
-  };
-}
-
 export class CollectionService {
   private active: ActiveRun | null = null;
 
@@ -194,70 +149,16 @@ export class CollectionService {
     classify: boolean;
     confirmLarge: boolean;
     mode?: CollectionMode;
-    dateFrom?: string | null;
-    dateTo?: string | null;
-    dateTimezone?: string | null;
-    dateBasis?: string | null;
   }): Promise<CollectionRunRecord> {
-    const hasDateRange = Boolean(input.dateFrom && input.dateTo);
     const hasIdRange = Boolean(input.start && input.end);
     const requestedMode = input.mode === 'incremental' ? 'incremental' : 'full';
 
-    if (hasDateRange && !hasIdRange) {
-      // date-only mode: reject any stray ID fields
-      if (input.start || input.end) {
-        throw Object.assign(new Error('Date collection mode does not accept ticket ID fields.'), {
-          code: 'INVALID_MODE',
-        });
-      }
-    } else if (hasIdRange && !hasDateRange) {
-      // id-only mode: reject any stray date fields
-      if (input.dateFrom || input.dateTo) {
-        throw Object.assign(new Error('ID collection mode does not accept date fields.'), {
-          code: 'INVALID_MODE',
-        });
-      }
-    } else if (hasDateRange && hasIdRange) {
-      // hybrid mode: both required
-      if (!input.start || !input.end || !input.dateFrom || !input.dateTo) {
-        throw Object.assign(new Error('Hybrid mode requires both an ID range and a date range.'), {
-          code: 'INVALID_MODE',
-        });
-      }
-    } else {
-      throw Object.assign(new Error('Provide a ticket ID range or a date range.'), { code: 'INVALID_RANGE' });
+    if (!hasIdRange) {
+      throw Object.assign(new Error('Provide a ticket ID range.'), { code: 'INVALID_RANGE' });
     }
 
-    let validation: RangeValidation;
-    let dateValidation: DateRangeValidation | null = null;
-
-    if (hasDateRange && !hasIdRange) {
-      dateValidation = validateDateRange(input.dateFrom || '', input.dateTo || '', input.dateTimezone || 'Africa/Cairo', input.dateBasis || 'closed');
-      if (!dateValidation.ok) {
-        throw Object.assign(new Error(dateValidation.error ?? 'Invalid date range'), { code: 'INVALID_RANGE' });
-      }
-      validation = {
-        ok: true,
-        startId: '0',
-        endId: '999999999999',
-        count: 0,
-        plan: hasIdRange
-          ? `Collect ticket IDs ${input.start}–${input.end} and filter the report to ${dateValidation!.dateFromDisplay}–${dateValidation!.dateToDisplay} (${dateValidation!.dateTimezone}, ${dateValidation!.dateBasis}).`
-          : `Collect tickets whose confirmed closure timestamps fall within ${dateValidation!.dateFromDisplay} to ${dateValidation!.dateToDisplay} (${dateValidation!.dateTimezone}, ${dateValidation!.dateBasis}).`,
-        warnings: dateValidation.warnings,
-      };
-    } else if (hasIdRange) {
-      validation = validateRange(input.start, input.end);
-      if (hasDateRange) {
-        dateValidation = validateDateRange(input.dateFrom || '', input.dateTo || '', input.dateTimezone || 'Africa/Cairo', input.dateBasis || 'closed');
-        if (!dateValidation.ok) {
-          throw Object.assign(new Error(dateValidation.error ?? 'Invalid date range'), { code: 'INVALID_RANGE' });
-        }
-      }
-    } else {
-      throw Object.assign(new Error('Provide a ticket ID range or a date range.'), { code: 'INVALID_RANGE' });
-    }
-    if (!validation.ok || !validation.startId || !validation.endId || (validation.count === undefined)) {
+    const validation = validateRange(input.start, input.end);
+    if (!validation.ok || !validation.startId || !validation.endId || validation.count === undefined) {
       throw Object.assign(new Error(validation.error ?? 'Invalid range'), { code: 'INVALID_RANGE' });
     }
     if (validation.requiresConfirmation && !input.confirmLarge) {
@@ -268,6 +169,7 @@ export class CollectionService {
         { code: 'LARGE_RANGE_REQUIRES_CONFIRMATION', validation },
       );
     }
+
     const latest = this.db.latestRun();
     const current = this.active?.record ?? (latest?.status === 'paused' ? latest : null);
     if (current && (current.status === 'running' || current.status === 'paused')) {
@@ -288,10 +190,6 @@ export class CollectionService {
       mode,
       requestedCount: validation.count,
       classificationEnabled: input.classify,
-      dateFrom: dateValidation?.dateFrom ?? null,
-      dateTo: dateValidation?.dateTo ?? null,
-      dateTimezone: dateValidation?.dateTimezone ?? null,
-      dateBasis: dateValidation?.dateBasis ?? null,
     });
     const active: ActiveRun = {
       record,
@@ -303,6 +201,146 @@ export class CollectionService {
     this.active = active;
     void this.startLoop(active);
     return record;
+  }
+  async startManualIds(input: { ids: string[]; classify: boolean; mode?: CollectionMode }): Promise<CollectionRunRecord> {
+    const requestedMode = input.mode === 'incremental' ? 'incremental' : 'full';
+    const ids = Array.from(
+      new Set(input.ids.map((value) => String(value).trim()).filter((value) => /^\d+$/.test(value))),
+    ).sort((a, b) => Number(BigInt(a) - BigInt(b)));
+
+    if (ids.length === 0) {
+      throw Object.assign(new Error('Provide at least one numeric ticket ID.'), { code: 'INVALID_RANGE' });
+    }
+
+    const latest = this.db.latestRun();
+    const current = this.active?.record ?? (latest?.status === 'paused' ? latest : null);
+    if (current && (current.status === 'running' || current.status === 'paused')) {
+      throw Object.assign(
+        new Error(
+          'Another collection run is active or paused. Resume or cancel it before starting a new run.',
+        ),
+        { code: 'RUN_ALREADY_ACTIVE', run: current },
+      );
+    }
+
+    const runId = crypto.randomUUID();
+    const mode = requestedMode;
+    const record = this.db.createRun({
+      id: runId,
+      startId: ids[0]!,
+      endId: ids[ids.length - 1]!,
+      mode,
+      requestedCount: ids.length,
+      classificationEnabled: input.classify,
+    });
+    const active: ActiveRun = {
+      record,
+      mode,
+      pauseRequested: false,
+      cancelRequested: false,
+      loopRunning: false,
+    };
+    this.active = active;
+    void this.startManualLoop(active, ids);
+    return record;
+  }
+
+  private async startManualLoop(active: ActiveRun, ids: string[]): Promise<void> {
+    if (active.loopRunning) return;
+    active.loopRunning = true;
+    try {
+      const diagnostics = this.diagnosticsFor(active);
+      diagnostics.notes.push(`Manual ID collection: ${ids.length} ticket ID(s).`);
+      const loopStarted = Date.now();
+      this.update(active, { status: 'running', stage: 'connecting', errorCode: null, errorMessage: null });
+      let page;
+      try {
+        page = await this.connection.ensureAuthenticated();
+      } catch (error) {
+        const message = error instanceof ConnectionError ? error.message : 'The Tickets dashboard connection is not ready.';
+        this.update(active, {
+          status: 'paused',
+          stage: 'waiting_for_connection',
+          errorCode: 'CONNECTION_REQUIRED',
+          errorMessage: message,
+        });
+        return;
+      }
+      const settings = this.db.getSettings();
+      const extractor = new DashboardExtractor(this.db, page, this.connection.getApiAccess(), (notice) => {
+        this.update(active, {
+          stage: 'rate_limit_cooldown',
+          errorCode: 'RATE_LIMIT_COOLDOWN',
+          errorMessage: `The dashboard asked for a pause. Waiting ${notice.seconds}s before retrying; completed tickets are kept.`,
+        });
+      });
+      const concurrency = Math.min(6, Math.max(1, settings.fetchConcurrency || 1));
+      for (let index = 0; index < ids.length; index += concurrency) {
+        if (active.cancelRequested) {
+          diagnostics.timings.totalMs = Date.now() - loopStarted;
+          this.saveDiagnostics(active, diagnostics);
+          this.finish(active, 'cancelled', 'cancelled');
+          return;
+        }
+        if (active.pauseRequested) {
+          diagnostics.timings.totalMs = Date.now() - loopStarted;
+          this.saveDiagnostics(active, diagnostics);
+          this.update(active, { status: 'paused', stage: 'paused', currentTicketId: null });
+          return;
+        }
+        const batch = ids.slice(index, index + concurrency);
+        this.update(active, {
+          status: 'running',
+          stage: 'extracting',
+          currentTicketId: batch[0] ?? null,
+          errorCode: null,
+          errorMessage: null,
+        });
+        const items = await Promise.all(
+          batch.map((ticketId) => this.collectOne(active, extractor, null, ticketId, diagnostics)),
+        );
+        for (const item of items) {
+          if (active.cancelRequested) {
+            diagnostics.timings.totalMs = Date.now() - loopStarted;
+            this.saveDiagnostics(active, diagnostics);
+            this.finish(active, 'cancelled', 'cancelled');
+            return;
+          }
+          if (active.pauseRequested) {
+            diagnostics.timings.totalMs = Date.now() - loopStarted;
+            this.saveDiagnostics(active, diagnostics);
+            this.update(active, { status: 'paused', stage: 'paused', currentTicketId: null });
+            return;
+          }
+          const result = await this.applyItem(active, item, diagnostics);
+          if (!result.ok && result.structure) {
+            this.connection.reportDataProblem(
+              'unexpected_page',
+              'The dashboard did not return the expected transcript data during manual ID collection.',
+            );
+          }
+        }
+      }
+      diagnostics.timings.totalMs = Date.now() - loopStarted;
+      this.saveDiagnostics(active, diagnostics);
+      const stats = this.refreshStats(active);
+      this.finish(active, stats.failed > 0 ? 'completed_with_errors' : 'completed', 'finished');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.db.updateRun(active.record.id, {
+        status: 'paused',
+        stage: 'paused',
+        errorCode: 'FATAL_RUN_ERROR',
+        errorMessage: message,
+      });
+      active.record.status = 'paused';
+      active.record.stage = 'paused';
+      active.record.errorCode = 'FATAL_RUN_ERROR';
+      active.record.errorMessage = message;
+      log('error', 'collection.manual_fatal', { runId: active.record.id, message });
+    } finally {
+      active.loopRunning = false;
+    }
   }
 
   pause(): CollectionRunRecord {
@@ -782,56 +820,9 @@ export class CollectionService {
     const start = BigInt(record.startId);
     const end = BigInt(record.endId);
 
-    const pureDateMode = record.dateFrom && record.dateTo && record.startId === '0' && record.endId === '999999999999';
-    let ids: string[];
-    let dateBasedIds: string[] = [];
-    if (record.dateFrom && record.dateTo && !pureDateMode) {
-      diagnostics.notes.push('Hybrid mode: using the requested ticket ID range. The report will be filtered to the selected date window after collection.');
-    }
-    if (record.dateFrom && record.dateTo && pureDateMode) {
-      this.update(active, { stage: 'discovering', currentTicketId: null });
-      const discoveryStarted = Date.now();
-      try {
-        const dateResult = await extractor.fetchIdsByClosedAtRange(record.dateFrom, record.dateTo);
-        if (dateResult) {
-          dateBasedIds = dateResult.ids.sort((a, b) => Number(BigInt(a) - BigInt(b)));
-          if (dateResult.mode === 'opened_at_proxy') {
-            diagnostics.notes.push('Date discovery used opened_at proxy because closed_at was not available on the dashboard listing. Actual closure timestamps are verified during extraction.');
-          }
-          log('info', 'collection.date_discovery', {
-            runId: record.id,
-            found: dateResult.ids.length,
-            pagesFetched: dateResult.pagesFetched,
-            durationMs: dateResult.durationMs,
-          });
-        }
-      } catch (error) {
-        log('warn', 'collection.date_discovery_failed', {
-          runId: record.id,
-          message: error instanceof Error ? error.message : 'unknown',
-        });
-      }
-      diagnostics.timings.discoveryMs = Date.now() - discoveryStarted;
-    }
+    const ids: string[] = [];
+    for (let current = start; current <= end; current += 1n) ids.push(current.toString());
 
-    if (dateBasedIds.length > 0) {
-      ids = dateBasedIds;
-    } else if (record.dateFrom && record.dateTo && pureDateMode) {
-      const message =
-        'Date-based discovery did not find any candidate tickets. The dashboard listing may not expose closure timestamps, or the selected window has no matches. Use ticket-ID mode or verify the date basis before collecting.';
-      log('warn', 'collection.date_discovery_empty', { runId: record.id, message });
-      this.update(active, {
-        status: 'paused',
-        stage: 'date_discovery_empty',
-        errorCode: 'DATE_DISCOVERY_EMPTY',
-        errorMessage: message,
-      });
-      return;
-    } else {
-      const idRange: string[] = [];
-      for (let current = start; current <= end; current += 1n) idRange.push(current.toString());
-      ids = idRange;
-    }
     const pending = ids.filter((ticketId) => {
       const existing = this.db.getItem(record.id, ticketId);
       return !(existing && ['collected', 'no_transcript', 'not_found'].includes(existing.state));
@@ -842,9 +833,6 @@ export class CollectionService {
         ? 'Incremental sync: verified listing metadata, reused complete transcripts, filled gaps.'
         : 'Full refresh: re-read every transcript in the range.',
     );
-    if (dateBasedIds.length > 0) {
-      diagnostics.notes.push(`Date-based discovery: discovered ${dateBasedIds.length} candidate ticket ID(s) via closed-at filter.`);
-    }
 
     let listing: ListingRange | null = null;
     if (this.connection.getApiAccess()) {

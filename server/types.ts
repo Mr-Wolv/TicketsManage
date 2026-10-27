@@ -212,11 +212,6 @@ export interface CollectionRunRecord {
   startedAt: string;
   finishedAt: string | null;
   lastUpdatedAt: string;
-  /** Date-based collection fields */
-  dateFrom: string | null;
-  dateTo: string | null;
-  dateTimezone: string | null;
-  dateBasis: string | null;
 }
 
 export interface CollectionRunDiagnostics {

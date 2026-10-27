@@ -1517,17 +1517,13 @@ export class Db {
     mode: 'incremental' | 'full';
     requestedCount: number;
     classificationEnabled: boolean;
-    dateFrom?: string | null;
-    dateTo?: string | null;
-    dateTimezone?: string | null;
-    dateBasis?: string | null;
   }): CollectionRunRecord {
     const now = new Date().toISOString();
     this.connection
       .prepare(
         `INSERT INTO collection_runs
-         (id, start_id, end_id, mode, status, requested_count, classification_enabled, date_from, date_to, date_timezone, date_basis, created_at, started_at, last_updated_at)
-         VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, start_id, end_id, mode, status, requested_count, classification_enabled, created_at, started_at, last_updated_at)
+         VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -1536,10 +1532,6 @@ export class Db {
         input.mode,
         input.requestedCount,
         input.classificationEnabled ? 1 : 0,
-        input.dateFrom ?? null,
-        input.dateTo ?? null,
-        input.dateTimezone ?? null,
-        input.dateBasis ?? null,
         now,
         now,
         now,
@@ -1614,10 +1606,6 @@ export class Db {
       startedAt: String(row.started_at),
       finishedAt: str(row.finished_at),
       lastUpdatedAt: String(row.last_updated_at),
-      dateFrom: str(row.date_from),
-      dateTo: str(row.date_to),
-      dateTimezone: str(row.date_timezone),
-      dateBasis: str(row.date_basis),
     };
   }
 

@@ -48,45 +48,7 @@ describe('collection mode enforcement', () => {
     expect(record.endId).toBe('10');
   });
 
-  it('accepts date-only mode when only date fields are provided', async () => {
-    const record = await service.start({
-      start: '',
-      end: '',
-      classify: false,
-      confirmLarge: false,
-      mode: 'full',
-      dateFrom: '17/10/26',
-      dateTo: '23/10/26',
-      dateTimezone: 'Africa/Cairo',
-      dateBasis: 'closed',
-    });
-    expect(record.status).toBe('running');
-    expect(record.startId).toBe('0');
-    expect(record.endId).toBe('999999999999');
-    expect(record.dateFrom).toBeTruthy();
-    expect(record.dateTo).toBeTruthy();
-  });
-
-  it('accepts hybrid mode when both ID and date fields are provided', async () => {
-    const record = await service.start({
-      start: '1',
-      end: '10',
-      classify: false,
-      confirmLarge: false,
-      mode: 'full',
-      dateFrom: '17/10/26',
-      dateTo: '23/10/26',
-      dateTimezone: 'Africa/Cairo',
-      dateBasis: 'closed',
-    });
-    expect(record.status).toBe('running');
-    expect(record.startId).toBe('1');
-    expect(record.endId).toBe('10');
-    expect(record.dateFrom).toBeTruthy();
-    expect(record.dateTo).toBeTruthy();
-  });
-
-  it('rejects requests that provide neither ID nor date range', async () => {
+  it('rejects requests that provide neither start nor end', async () => {
     await expect(
       service.start({
         start: '',
@@ -98,17 +60,27 @@ describe('collection mode enforcement', () => {
     ).rejects.toMatchObject({ code: 'INVALID_RANGE' });
   });
 
-  it('rejects hybrid mode when one side is incomplete', async () => {
+  it('rejects a start ID greater than end ID', async () => {
     await expect(
       service.start({
-        start: '1',
-        end: '',
+        start: '10',
+        end: '1',
         classify: false,
         confirmLarge: false,
         mode: 'full',
-        dateFrom: '17/10/26',
-        dateTo: '23/10/26',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_MODE' });
+    ).rejects.toMatchObject({ code: 'INVALID_RANGE' });
+  });
+
+  it('rejects non-numeric IDs', async () => {
+    await expect(
+      service.start({
+        start: 'abc',
+        end: '10',
+        classify: false,
+        confirmLarge: false,
+        mode: 'full',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_RANGE' });
   });
 });

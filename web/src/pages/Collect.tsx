@@ -36,11 +36,8 @@ export function CollectPage() {
   const { status, refreshStatus, notify, taxonomyById, demoMode } = useApp();
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
-  const [dateFrom, setDateFrom] = useState('17/10/26');
-  const [dateTo, setDateTo] = useState('23/10/26');
-  const [dateTimezone, setDateTimezone] = useState('Africa/Cairo');
-  const [dateBasis, setDateBasis] = useState('closed');
-  const [collectMode, setCollectMode] = useState<'date' | 'id' | 'hybrid'>('date');
+  const [manualIds, setManualIds] = useState('');
+  const [collectMode, setCollectMode] = useState<'id' | 'manual'>('id');
   const [classify, setClassify] = useState(true);
   const [incremental, setIncremental] = useState(true);
   const [preview, setPreview] = useState<RangePreview | null>(null);
@@ -102,19 +99,18 @@ export function CollectPage() {
     setBusy('preview');
     setError(null);
     try {
-      const body: Record<string, unknown> =
-        collectMode === 'id'
-          ? { start, end }
-          : collectMode === 'date'
-            ? { dateFrom, dateTo, dateTimezone, dateBasis }
-            : { start, end, dateFrom, dateTo, dateTimezone, dateBasis };
-      const result = await api<RangePreview>('/api/collection/preview', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      setPreview(result);
-      setConfirmLarge(false);
-      if (!result.ok) notify(result.error ?? 'The range is not valid.', 'error');
+      if (collectMode === 'id') {
+        const result = await api<RangePreview>('/api/collection/preview', {
+          method: 'POST',
+          body: JSON.stringify({ start, end }),
+        });
+        setPreview(result);
+        setConfirmLarge(false);
+        if (!result.ok) notify(result.error ?? 'The range is not valid.', 'error');
+      } else {
+        setPreview(null);
+        notify('Manual ID collection does not require a range preview.', 'info');
+      }
     } catch (previewError) {
       setError(previewError instanceof Error ? previewError.message : 'Preview failed.');
     } finally {
@@ -129,11 +125,6 @@ export function CollectPage() {
       notify('Review the range preview, then select Start collection again.', 'info');
       return;
     }
-    if (collectMode === 'date' && !dateFrom && !dateTo) {
-      await doPreview();
-      notify('Review the date range preview, then select Start collection again.', 'info');
-      return;
-    }
     if (preview?.requiresConfirmation && !confirmLarge) {
       notify('Confirm the large-range warning before starting.', 'error');
       return;
@@ -144,40 +135,27 @@ export function CollectPage() {
     }
     setBusy('start');
     try {
-      const body: Record<string, unknown> =
-        collectMode === 'id'
-          ? {
-              start: preview?.startId ?? start,
-              end: preview?.endId ?? end,
-              classify,
-              confirmLarge,
-              mode: incremental ? 'incremental' : 'full',
-            }
-          : collectMode === 'date'
-            ? {
-                dateFrom,
-                dateTo,
-                dateTimezone,
-                dateBasis,
-                classify,
-                confirmLarge,
-                mode: incremental ? 'incremental' : 'full',
-              }
-            : {
-                start: preview?.startId ?? start,
-                end: preview?.endId ?? end,
-                dateFrom,
-                dateTo,
-                dateTimezone,
-                dateBasis,
-                classify,
-                confirmLarge,
-                mode: incremental ? 'incremental' : 'full',
-              };
-      await api('/api/collection/start', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
+      if (collectMode === 'id') {
+        await api('/api/collection/start', {
+          method: 'POST',
+          body: JSON.stringify({
+            start: preview?.startId ?? start,
+            end: preview?.endId ?? end,
+            classify,
+            confirmLarge,
+            mode: incremental ? 'incremental' : 'full',
+          }),
+        });
+      } else {
+        const ids = manualIds
+          .split(/[\s,]+/)
+          .map((value) => value.trim())
+          .filter((value) => /^\d+$/.test(value));
+        await api('/api/collection/manual-ids', {
+          method: 'POST',
+          body: JSON.stringify({ ids, classify, mode: incremental ? 'incremental' : 'full' }),
+        });
+      }
       notify('Collection started. Progress is checkpointed after each ticket.');
       await loadCollection();
       await refreshStatus();
@@ -218,12 +196,17 @@ export function CollectPage() {
     setSelectedTicket(ticketId);
   };
 
+  const idCount = useMemo(
+    () => manualIds.split(/[\s,]+/).filter((value) => /^\d+$/.test(value)).length,
+    [manualIds],
+  );
+
   return (
     <div className="page">
       <PageHeader
         eyebrow="Read-only collection"
         title="Collect tickets"
-        description="Verify an inclusive ticket ID range and collect only what your authorized dashboard account can access."
+        description="Collect by inclusive ticket ID range, or enter individual ticket IDs for ad-hoc collection."
       />
 
       {demoMode ? (
@@ -238,19 +221,11 @@ export function CollectPage() {
           <ConnectionCard onChanged={loadCollection} />
 
           <SectionCard
-            title={
-              collectMode === 'date'
-                ? 'Date range'
-                : collectMode === 'id'
-                  ? 'Ticket ID range'
-                  : 'Ticket ID + date filter'
-            }
+            title={collectMode === 'id' ? 'Ticket ID range' : 'Manual ticket IDs'}
             description={
-              collectMode === 'date'
-                ? 'Use DD/MM/YY. Closed-at is the date basis.'
-                : collectMode === 'id'
-                  ? 'Enter the inclusive ticket ID range.'
-                  : 'Combine date and ID filters for precise collection.'
+              collectMode === 'id'
+                ? 'Enter the inclusive ticket ID range.'
+                : 'Enter individual ticket IDs, separated by spaces or commas.'
             }
           >
             <label className="field">
@@ -259,77 +234,15 @@ export function CollectPage() {
                 className="input"
                 value={collectMode}
                 onChange={(event) => {
-                  setCollectMode(event.target.value as 'date' | 'id' | 'hybrid');
+                  setCollectMode(event.target.value as 'id' | 'manual');
                   setPreview(null);
                 }}
               >
-                <option value="date">By date</option>
-                <option value="id">By ID</option>
-                <option value="hybrid">By ID + date filter</option>
+                <option value="id">By ID range</option>
+                <option value="manual">Manual IDs</option>
               </select>
             </label>
-            {(collectMode === 'date' || collectMode === 'hybrid') && (
-              <div className="form-grid">
-                <label className="field">
-                  <span className="field-label">From</span>
-                  <input
-                    className="input"
-                    placeholder="17/10/26"
-                    value={dateFrom}
-                    onChange={(event) => {
-                      setDateFrom(event.target.value.replace(/[^\d/]/g, '').slice(0, 8));
-                      setPreview(null);
-                    }}
-                  />
-                </label>
-                <label className="field">
-                  <span className="field-label">To</span>
-                  <input
-                    className="input"
-                    placeholder="23/10/26"
-                    value={dateTo}
-                    onChange={(event) => {
-                      setDateTo(event.target.value.replace(/[^\d/]/g, '').slice(0, 8));
-                      setPreview(null);
-                    }}
-                  />
-                </label>
-              </div>
-            )}
-            {(collectMode === 'date' || collectMode === 'hybrid') && (
-              <div className="form-grid">
-                <label className="field">
-                  <span className="field-label">Timezone</span>
-                  <select
-                    className="input"
-                    value={dateTimezone}
-                    onChange={(event) => {
-                      setDateTimezone(event.target.value);
-                      setPreview(null);
-                    }}
-                  >
-                    <option value="Africa/Cairo">Africa/Cairo</option>
-                    <option value="UTC">UTC</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span className="field-label">Date basis</span>
-                  <select
-                    className="input"
-                    value={dateBasis}
-                    onChange={(event) => {
-                      setDateBasis(event.target.value);
-                      setPreview(null);
-                    }}
-                  >
-                    <option value="closed">Closed at</option>
-                    <option value="opened">Opened at</option>
-                    <option value="activity">Last activity</option>
-                  </select>
-                </label>
-              </div>
-            )}
-            {(collectMode === 'id' || collectMode === 'hybrid') && (
+            {collectMode === 'id' ? (
               <div className="form-grid">
                 <label className="field">
                   <span className="field-label">Starting ticket ID</span>
@@ -360,6 +273,21 @@ export function CollectPage() {
                   />
                 </label>
               </div>
+            ) : (
+              <label className="field">
+                <span className="field-label">Ticket IDs</span>
+                <textarea
+                  className="input"
+                  rows={4}
+                  placeholder={"e.g. 123 456 789\nor: 123, 456, 789"}
+                  value={manualIds}
+                  onChange={(event) => {
+                    setManualIds(event.target.value);
+                    setPreview(null);
+                  }}
+                />
+                {idCount > 0 ? <span className="muted">{idCount} valid ID(s) entered</span> : null}
+              </label>
             )}
             <label className="check-row">
               <input
@@ -391,13 +319,25 @@ export function CollectPage() {
               </Alert>
             ) : null}
             <div className="button-row">
-              <button className="button button-ghost" onClick={doPreview} disabled={busy !== null || (collectMode === "date" ? (!dateFrom || !dateTo) : (!start || !end))}>
+              <button
+                className="button button-ghost"
+                onClick={doPreview}
+                disabled={
+                  busy !== null ||
+                  (collectMode === 'id' ? (!start || !end) : (!manualIds || idCount === 0))
+                }
+              >
                 {busy === 'preview' ? 'Checking…' : 'Preview range'}
               </button>
               <button
                 className="button button-primary"
                 onClick={startRun}
-                disabled={busy !== null || !authenticated || activeOrPaused || (collectMode === "date" ? (!dateFrom || !dateTo) : (!start || !end))}
+                disabled={
+                  busy !== null ||
+                  !authenticated ||
+                  activeOrPaused ||
+                  (collectMode === 'id' ? (!start || !end) : (!manualIds || idCount === 0))
+                }
               >
                 {busy === 'start' ? 'Starting…' : 'Start collection'}
               </button>
@@ -500,7 +440,7 @@ export function CollectPage() {
                 <div className="mini-grid">
                   <MetricCard label="Collected" value={run.collected} tone="success" />
                   <MetricCard label="No transcript" value={run.noTranscript} />
-                  <MetricCard label="Not found" value={run.notFound} />
+                  <MetricCard label="Missing" value={run.notFound} />
                   <MetricCard label="Partial" value={run.partial} tone={run.partial ? 'warn' : undefined} />
                   <MetricCard label="Failed" value={run.failed} tone={run.failed ? 'danger' : undefined} />
                   <MetricCard label="Classified" value={run.classified} />
@@ -588,11 +528,11 @@ export function CollectPage() {
           <SectionCard title="What happens during collection">
             <ol className="process-list">
               <li>
-                Sync first reads the dashboard’s ordered ticket listing (15 rows per request) to discover the range and
+                Sync first reads the dashboard's ordered ticket listing (15 rows per request) to discover the range and
                 detect metadata changes. Complete stored records are reused without reopening their transcript.
               </li>
               <li>
-                A full refresh re-reads every transcript through the dashboard’s authenticated JSON API, falling back to
+                A full refresh re-reads every transcript through the dashboard's authenticated JSON API, falling back to
                 the page navigation path if that API is unavailable. No Discord token is stored by this application.
               </li>
               <li>Open the transcript view when available; store ordered messages and metadata locally.</li>

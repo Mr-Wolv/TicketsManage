@@ -28,7 +28,7 @@ const STATE_LABELS: Record<string, { label: string; tone: string }> = {
   collected: { label: 'Collected', tone: 'success' },
   partial: { label: 'Partial', tone: 'warn' },
   no_transcript: { label: 'No transcript', tone: 'neutral' },
-  not_found: { label: 'Not found', tone: 'neutral' },
+  not_found: { label: 'missing', tone: 'neutral' },
   failed: { label: 'Failed', tone: 'danger' },
   completed: { label: 'Completed', tone: 'success' },
   completed_with_errors: { label: 'Completed with errors', tone: 'warn' },
