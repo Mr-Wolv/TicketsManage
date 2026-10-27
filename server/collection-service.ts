@@ -50,10 +50,6 @@ export interface RangeValidation {
   requiresConfirmation?: boolean;
   warnings?: string[];
   plan?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  dateTimezone?: string;
-  dateBasis?: string;
 }
 
 export function validateRange(startInput: string, endInput: string): RangeValidation {

@@ -661,6 +661,17 @@ export function createApiRouter(deps: {
     });
   });
 
+  router.get('/tickets/missing-ids', (req, res) => {
+    const start = typeof req.query.start === 'string' ? req.query.start.trim() : '';
+    const end = typeof req.query.end === 'string' ? req.query.end.trim() : '';
+    if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) {
+      res.status(400).json({ error: 'start and end must be numeric ticket IDs.' });
+      return;
+    }
+    const missing = db.getMissingIds(start, end);
+    res.json({ start, end, count: missing.length, missingIds: missing });
+  });
+
   router.get('/tickets/:ticketId', (req, res, next) => {
     const ticket = db.getTicket(String(req.params.ticketId));
     if (!ticket) {

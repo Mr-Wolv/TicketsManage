@@ -803,6 +803,22 @@ export class DashboardExtractor {
     };
   }
 
+  /**
+   * TIMESTAMP PROXY REGRESSION (date mode deprecated — this function is dead code):
+   *
+   * Originally, when dashboard listing rows lacked `closed_at`, the discovery
+   * fallback used the ticket's last message timestamp (extracted from bot embed
+   * timestamps in the transcript) as a faithful closed-at proxy.
+   *
+   * Current code (lines 859-872) falls back to `opened_at` instead, which is
+   * incorrect: a ticket opened on 17/10 may have closed on 20/10, so filtering
+   * by opened_at returns 0 matches for a "closed on 17/10" query.
+   *
+   * Because date/time/date-basis collection modes are being fully radicated in
+   * favor of pure ID-range workflow, this function is no longer invoked.
+   * It is kept for reference only and should be removed once date mode cleanup
+   * is confirmed complete across exports.ts and routes.ts.
+   */
   async fetchIdsByClosedAtRange(
     fromIso: string,
     toIso: string,

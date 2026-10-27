@@ -839,6 +839,33 @@ export class Db {
     };
   }
 
+  getMissingIds(start: string, end: string): string[] {
+    if (!/^\d+$/.test(start) || !/^\d+$/.test(end)) return [];
+    const s = BigInt(start);
+    const e = BigInt(end);
+    if (s > e) return [];
+    const rangeSize = Number(e - s + 1n);
+    if (rangeSize > 10000) return []; // Safety limit: don't generate massive sequences
+
+    const existing = new Set(
+      this.connection
+        .prepare(
+          `SELECT CAST(ticket_id AS TEXT) AS ticket_id FROM tickets WHERE CAST(ticket_id AS INTEGER) BETWEEN ? AND ?`,
+        )
+        .all(Number(s), Number(e))
+        .map((row: Row) => String(row.ticket_id)),
+    );
+
+    const missing: string[] = [];
+    let current = s;
+    while (current <= e) {
+      const id = String(current);
+      if (!existing.has(id)) missing.push(id);
+      current += 1n;
+    }
+    return missing;
+  }
+
   listTickets(filters: TicketListFilters = {}): { items: TicketRecord[]; total: number; page: number; pageSize: number } {
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = Math.min(200, Math.max(5, filters.pageSize ?? 25));

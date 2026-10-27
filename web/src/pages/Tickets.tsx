@@ -23,6 +23,8 @@ interface TicketFilters {
   status: string;
   sort: string;
   dir: string;
+  idStart: string;
+  idEnd: string;
 }
 
 const INITIAL_FILTERS: TicketFilters = {
@@ -34,6 +36,8 @@ const INITIAL_FILTERS: TicketFilters = {
   status: '',
   sort: 'id',
   dir: 'desc',
+  idStart: '',
+  idEnd: '',
 };
 
 export function TicketsPage() {
@@ -45,6 +49,8 @@ export function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [missingIds, setMissingIds] = useState<string[]>([]);
+  const [missingLoading, setMissingLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +62,8 @@ export function TicketsPage() {
       if (filters.fallback) params.set('fallback', filters.fallback);
       if (filters.reviewStatus) params.set('reviewStatus', filters.reviewStatus);
       if (filters.status) params.set('status', filters.status);
+      if (filters.idStart) params.set('idStart', filters.idStart);
+      if (filters.idEnd) params.set('idEnd', filters.idEnd);
       params.set('sort', filters.sort);
       params.set('dir', filters.dir);
       if (demoMode) params.set('demo', 'only');
@@ -77,6 +85,34 @@ export function TicketsPage() {
   }, [load]);
 
   useEffect(() => {
+    if (!filters.idStart || !filters.idEnd) {
+      setMissingIds([]);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    setMissingLoading(true);
+    const fetchMissing = async () => {
+      try {
+        const result = await api<{ missingIds: string[] }>(
+          `/api/tickets/missing-ids?start=${encodeURIComponent(filters.idStart)}&end=${encodeURIComponent(filters.idEnd)}`,
+          { signal: controller.signal },
+        );
+        if (!cancelled) setMissingIds(result.missingIds ?? []);
+      } catch {
+        if (!cancelled) setMissingIds([]);
+      } finally {
+        if (!cancelled) setMissingLoading(false);
+      }
+    };
+    void fetchMissing();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [filters.idStart, filters.idEnd]);
+
+  useEffect(() => {
     setPage(1);
   }, [filters.search, filters.staff, filters.category, filters.fallback, filters.reviewStatus, filters.status, filters.sort, filters.dir, demoMode]);
 
@@ -89,6 +125,8 @@ export function TicketsPage() {
   const update = (key: keyof TicketFilters, value: string) => {
     setFilters((current) => ({ ...current, [key]: value }));
   };
+
+  const missingCount = missingIds.length;
 
   const exportQuery = new URLSearchParams();
   if (filters.staff) exportQuery.set('staff', filters.staff);
@@ -127,6 +165,24 @@ export function TicketsPage() {
               placeholder="Ticket ID, opener, claimant, closer or reason"
               value={filters.search}
               onChange={(event) => update('search', event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">Start ID</span>
+            <input
+              className="input"
+              placeholder="e.g. 9001"
+              value={filters.idStart}
+              onChange={(event) => update('idStart', event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">End ID</span>
+            <input
+              className="input"
+              placeholder="e.g. 9010"
+              value={filters.idEnd}
+              onChange={(event) => update('idEnd', event.target.value)}
             />
           </label>
           <label className="field">
@@ -204,6 +260,31 @@ export function TicketsPage() {
       </SectionCard>
 
       {error ? <Alert tone="danger" title="Ticket explorer error">{error}</Alert> : null}
+
+      {(missingCount > 0 || missingLoading) && filters.idStart && filters.idEnd ? (
+        <SectionCard
+          title={
+            <span>
+              Missing IDs in range {filters.idStart}–{filters.idEnd}
+              {missingLoading ? <span className="muted"> · computing…</span> : null}
+            </span>
+          }
+          description={
+            missingCount > 0
+              ? `${missingCount} ticket ID${missingCount === 1 ? '' : 's'} in this range are not present in the local database.`
+              : 'No missing IDs detected in this range.'
+          }
+        >
+          <div className="missing-grid">
+            {missingIds.map((id) => (
+              <span key={id} className="missing-badge">
+                <StatusBadge value="not_found" />
+                <span className="missing-id">{id}</span>
+              </span>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         title={

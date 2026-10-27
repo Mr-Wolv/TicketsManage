@@ -2092,3 +2092,26 @@ pre {
     font-size: 11px;
   }
 }
+.missing-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.missing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(127, 127, 127, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+.missing-id {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
