@@ -375,7 +375,7 @@ export interface StaffRow {
 
 export interface StaffReport {
   generatedAt: string;
-  period: { from: string | null; to: string | null; dateBasis: 'opened' | 'activity' };
+  period: { idStart: string | null; idEnd: string | null };
   includesDemo: boolean;
   filters: { staff: string | null };
   rows: StaffRow[];

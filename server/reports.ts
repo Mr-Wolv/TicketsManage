@@ -3,9 +3,8 @@ import type { CategoryId, TicketRecord } from './types.js';
 import { getUnifiedCategory } from './classifier/taxonomy.js';
 
 export interface StaffReportFilters {
-  from?: string;
-  to?: string;
-  dateBasis?: 'opened' | 'activity';
+  idStart?: string;
+  idEnd?: string;
   includeDemo?: boolean;
   demoOnly?: boolean;
   staff?: string;
@@ -37,7 +36,7 @@ export interface StaffReportRow {
 
 export interface StaffReport {
   generatedAt: string;
-  period: { from: string | null; to: string | null; dateBasis: 'opened' | 'activity' };
+  period: { idStart: string | null; idEnd: string | null };
   includesDemo: boolean;
   demoOnly: boolean;
   filters: { staff: string | null };
@@ -63,9 +62,8 @@ function loadTickets(db: Db, filters: StaffReportFilters): TicketRecord[] {
       pageSize: 200,
       includeDemo: filters.includeDemo,
       demoOnly: filters.demoOnly,
-      from: filters.from,
-      to: filters.to,
-      dateBasis: filters.dateBasis,
+      idStart: filters.idStart,
+      idEnd: filters.idEnd,
       staff: filters.staff,
       sort: 'id',
       dir: 'asc',
@@ -226,9 +224,8 @@ export function buildStaffReport(db: Db, filters: StaffReportFilters): StaffRepo
   return {
     generatedAt: new Date().toISOString(),
     period: {
-      from: filters.from ?? null,
-      to: filters.to ?? null,
-      dateBasis: filters.dateBasis ?? 'opened',
+      idStart: filters.idStart ?? null,
+      idEnd: filters.idEnd ?? null,
     },
     includesDemo: Boolean(filters.includeDemo),
     demoOnly: Boolean(filters.demoOnly),
@@ -245,9 +242,7 @@ export function buildStaffReport(db: Db, filters: StaffReportFilters): StaffRepo
     },
     methodology:
       'Totals sum the final staff awards produced by the deterministic staff-credit rules, never raw ticket base scores. Different confirmed claimant/closer = zero for both; same claimant/closer = full base; confirmed unclaimed with reason = half base to closer; unclaimed without reason = zero; missing identities = unresolved. Ratings are averaged only across credited tickets with a real rating; missing ratings are excluded, not treated as zero. ' +
-      (filters.dateBasis === 'activity'
-        ? 'The date basis is activity: the last transcript message timestamp, which is the closest available evidence of when a ticket closed. The dashboard exposes no closure timestamp, so a ticket can have been closed shortly after its last message. Tickets with no messages fall back to their opening time.'
-        : 'The date basis is opening: tickets are placed in the day they were opened. The dashboard exposes no closure timestamp.'),
+      'The report uses an ID range: only tickets with IDs within the specified start/end are included.',
   };
 }
 

@@ -75,6 +75,8 @@ export interface TicketListFilters {
   dateBasis?: 'opened' | 'activity';
   includeDemo?: boolean;
   demoOnly?: boolean;
+  idStart?: string;
+  idEnd?: string;
   sort?: 'id' | 'collected' | 'base' | 'awarded' | 'reason';
   dir?: 'asc' | 'desc';
 }
@@ -873,6 +875,14 @@ export class Db {
     if (filters.to) {
       where.push(`${dateExpression} <= ?`);
       params.push(filters.to);
+    }
+    if (filters.idStart && /^\d+$/.test(filters.idStart)) {
+      where.push(`CAST(t.ticket_id AS INTEGER) >= ?`);
+      params.push(Number(filters.idStart));
+    }
+    if (filters.idEnd && /^\d+$/.test(filters.idEnd)) {
+      where.push(`CAST(t.ticket_id AS INTEGER) <= ?`);
+      params.push(Number(filters.idEnd));
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const sortMap: Record<string, string> = {

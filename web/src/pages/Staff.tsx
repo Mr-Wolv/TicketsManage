@@ -14,9 +14,8 @@ import type { StaffReport } from '../types';
 
 export function StaffPage() {
   const { demoMode, notify, refreshStatus } = useApp();
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [dateBasis, setDateBasis] = useState<'activity' | 'opened'>('activity');
+  const [idStart, setIdStart] = useState('');
+  const [idEnd, setIdEnd] = useState('');
   const [staff, setStaff] = useState('');
   const [report, setReport] = useState<StaffReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,9 +29,8 @@ export function StaffPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (from) params.set('from', from);
-      if (to) params.set('to', to);
-      params.set('dateBasis', dateBasis);
+      if (idStart) params.set('idStart', idStart);
+      if (idEnd) params.set('idEnd', idEnd);
       if (staff) params.set('staff', staff);
       if (demoMode) params.set('demo', 'only');
       const result = await api<StaffReport>(`/api/staff?${params.toString()}`);
@@ -43,7 +41,7 @@ export function StaffPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, dateBasis, staff, demoMode]);
+  }, [idStart, idEnd, staff, demoMode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 250);
@@ -51,9 +49,8 @@ export function StaffPage() {
   }, [load]);
 
   const exportParams = new URLSearchParams();
-  if (from) exportParams.set('from', from);
-  if (to) exportParams.set('to', to);
-  exportParams.set('dateBasis', dateBasis);
+  if (idStart) exportParams.set('idStart', idStart);
+  if (idEnd) exportParams.set('idEnd', idEnd);
   if (staff) exportParams.set('staff', staff);
   if (demoMode) exportParams.set('demo', 'only');
 
@@ -207,23 +204,22 @@ export function StaffPage() {
       <SectionCard title="Report period">
         <div className="filter-grid">
           <label className="field">
-            <span className="field-label">From date</span>
-            <input type="date" className="input" value={from} onChange={(event) => setFrom(event.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">To date</span>
-            <input type="date" className="input" value={to} onChange={(event) => setTo(event.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">Date basis</span>
-            <select
+            <span className="field-label">Start ID</span>
+            <input
               className="input"
-              value={dateBasis}
-              onChange={(event) => setDateBasis(event.target.value === 'opened' ? 'opened' : 'activity')}
-            >
-              <option value="activity">Last activity (close-date proxy)</option>
-              <option value="opened">Ticket opening time</option>
-            </select>
+              placeholder="e.g. 1001"
+              value={idStart}
+              onChange={(event) => setIdStart(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">End ID</span>
+            <input
+              className="input"
+              placeholder="e.g. 2000"
+              value={idEnd}
+              onChange={(event) => setIdEnd(event.target.value)}
+            />
           </label>
           <label className="field field-wide">
             <span className="field-label">Staff member (optional)</span>
@@ -236,10 +232,8 @@ export function StaffPage() {
           </label>
         </div>
         <p className="muted">
-          The dashboard exposes no closing timestamp. “Last activity” uses the final transcript message as the closest
-          evidence of when a ticket closed, which matches day-by-day staff totals far better than the opening date. Dates
-          are interpreted in this machine’s local timezone. Missing ratings are excluded from averages, not treated as
-          zero.
+          Use numeric ticket IDs to bound the report. Leave both empty to include all tickets. Missing ratings are
+          excluded from averages, not treated as zero.
         </p>
       </SectionCard>
 
@@ -277,13 +271,13 @@ export function StaffPage() {
             <SectionCard>
               <EmptyState
                 title="No staff activity in this period"
-                description="Collect and classify tickets, or widen the date filter. Unresolved staff attribution is never guessed into a staff total."
+                description="Collect and classify tickets, or widen the ID range. Unresolved staff attribution is never guessed into a staff total."
               />
             </SectionCard>
           ) : (
             <SectionCard
               title="Awards by staff member"
-              description={`Generated ${formatDate(report.generatedAt)}${report.period.from || report.period.to ? ` · ${report.period.from ? formatDate(report.period.from) : 'start'} to ${report.period.to ? formatDate(report.period.to) : 'now'}` : ''}`}
+              description={`Generated ${formatDate(report.generatedAt)}${report.period.idStart || report.period.idEnd ? ` · ID ${report.period.idStart ?? '...'} to ${report.period.idEnd ?? '...'}` : ''}`}
             >
               <div className="table-wrap">
                 <table className="data-table staff-table">

@@ -697,9 +697,8 @@ export function createApiRouter(deps: {
 
   router.get('/staff', (req, res) => {
     const report = buildStaffReport(db, {
-      from: normalizeDateFilter(req.query.from, false),
-      to: normalizeDateFilter(req.query.to, true),
-      dateBasis: req.query.dateBasis === 'activity' ? 'activity' : 'opened',
+      idStart: typeof req.query.idStart === 'string' ? req.query.idStart : undefined,
+      idEnd: typeof req.query.idEnd === 'string' ? req.query.idEnd : undefined,
       staff: typeof req.query.staff === 'string' ? req.query.staff : undefined,
       includeDemo: boolQuery(req.query.demo),
       demoOnly: req.query.demo === 'only',
