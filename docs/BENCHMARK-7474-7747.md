@@ -32,11 +32,11 @@ The manual table uses display names; the dashboard uses Discord IDs. The mapping
 
 | Manual name | Application staff | ID | Basis |
 |---|---|---|---|
-| Henry | `b932` | `752978053101256744` | largest ticket volume and total |
+| staff-d | `b932` | `example-staff-id` | largest ticket volume and total |
 | Omar | `_jr5` | `1241894660541120632` | second-largest volume and total |
-| Xmax | `xmax5696` | `744377778102730864` | direct name match |
+| staff-c | `xmax5696` | `744377778102730864` | direct name match |
 | Sheroo | `4eroo` | `1108646863873249320` | closest name/transliteration and only remaining 14-ticket group |
-| Labeb | `ahmed_labeb` | `481974168032772118` | direct name match |
+| staff-e | `ahmed_labeb` | `481974168032772118` | direct name match |
 | Heart | `_k.in` | `807010733325811712` | exact total match (20) |
 | Duilio | `duilio_` | `750540980528218223` | direct name match |
 | Comment | — | — | not a staff row in the application data |
@@ -45,8 +45,8 @@ Two application staff members are absent from the manual table:
 
 | Application staff | ID | Tickets | Awarded |
 |---|---|---:|---:|
-| `miidoo.` | `1172535353803014226` | 1 | 2.5 |
-| `n3k4a.` | `358977666482831371` | 1 | 1 |
+| `staff-a.` | `example-staff-id-2` | 1 | 2.5 |
+| `staff-b.` | `example-staff-id-3` | 1 | 1 |
 
 Their **3.5** points explain part of the difference between the mapped staff total and the application-wide total.
 
@@ -56,11 +56,11 @@ Their **3.5** points explain part of the difference between the mapped staff tot
 
 | Manual name | App staff | Manual daily | Donation | Manual displayed | App tickets | App points | App + manual donation | vs daily | vs displayed |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Xmax | `xmax5696` | 67 | 3 | 71 | 25 | 54.5 | 57.5 | -12.5 | -16.5 |
+| staff-c | `xmax5696` | 67 | 3 | 71 | 25 | 54.5 | 57.5 | -12.5 | -16.5 |
 | Omar | `_jr5` | 111 | 7 | 119 | 50 | 112 | 119 | +1 | -7 |
-| Henry | `b932` | 319 | 23 | 343 | 139 | 339.5 | 362.5 | +20.5 | -3.5 |
+| staff-d | `b932` | 319 | 23 | 343 | 139 | 339.5 | 362.5 | +20.5 | -3.5 |
 | Sheroo | `4eroo` | 38 | 1 | 40 | 14 | 24.5 | 25.5 | -13.5 | -15.5 |
-| Labeb | `ahmed_labeb` | 29 | 9 | 39 | 19 | 36 | 45 | +7 | -3 |
+| staff-e | `ahmed_labeb` | 29 | 9 | 39 | 19 | 36 | 45 | +7 | -3 |
 | Heart | `_k.in` | 19 | 0 | 20 | 10 | 20 | 20 | +1 | 0 |
 | Comment | — | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Duilio | `duilio_` | 0 | 2 | 3 | 3 | 0 | 2 | 0 | -3 |
@@ -84,7 +84,7 @@ The aggregate closes exactly:
 - `586.5` mapped application points + `45` donations + `3.5` unlisted staff = **635**.
 - Correcting the manual’s +1-per-row error gives **628**; adding the two unlisted staff gives **631.5**, which equals the mapped application score plus donations.
 
-That exact aggregate does **not** mean every person matches. The Xmax/Sheroo deficits and the Henry/Labeb surpluses largely cancel. They are reported below rather than hidden.
+That exact aggregate does **not** mean every person matches. The staff-c/Sheroo deficits and the staff-d/staff-e surpluses largely cancel. They are reported below rather than hidden.
 
 ## 5. What changed in classifier 2.1.0
 
@@ -117,8 +117,8 @@ The 2 remaining fallbacks are genuinely unclear: `ban` (#7571) and `Automaticall
 1. **Donations are not part of the ticket taxonomy.** The application has no donation category or manual-adjustment store. The 45 manual donation points are added in this report only; the app itself reports 590 for the range (586.5 mapped).
 2. **Manual daily data is approximate.** The account holder warned that some cells were miscalculated. Seven Sum cells are also +1 over their own columns. Per-person differences should be read as review leads, not as proof that the app is wrong.
 3. **Day grouping now uses a close-date proxy.** The dashboard still exposes no closing timestamp. A new `dateBasis=activity` filter uses the final transcript message timestamp, which is the closest available evidence of when a ticket stopped being active. Section 8 compares the 17–23 October window on that basis; daily cells match several staff-days exactly, so this is substantially closer than the earlier opening-time fallback. It is still a proxy, not a recorded closure event.
-4. **Some per-person gaps remain material.** Xmax is 12.5 below the manual daily total; Sheroo is 13.5 below; Henry is 20.5 above; Labeb is 7 above. These are candidates for ticket-level review, not automatic score adjustments.
-5. **Unlisted staff.** `miidoo.` and `n3k4a.` account for 3.5 points and are absent from the manual table.
+4. **Some per-person gaps remain material.** staff-c is 12.5 below the manual daily total; Sheroo is 13.5 below; staff-d is 20.5 above; staff-e is 7 above. These are candidates for ticket-level review, not automatic score adjustments.
+5. **Unlisted staff.** `staff-a.` and `staff-b.` account for 3.5 points and are absent from the manual table.
 6. **Two tickets are genuinely missing** from the dashboard (#7700, #7737). The manual total may or may not include them; they cannot be scored.
 7. **No live ticket was modified.** Collection is read-only. The only writes were local reassessments of already collected records and the benchmark/report files.
 
@@ -147,15 +147,15 @@ Dates are interpreted in the machine timezone (Africa/Cairo). “Activity” is 
 
 | Staff | App points | App credited tickets | Manual Sum | Manual daily | Donation | App − manual daily |
 |---|---:|---:|---:|---:|---:|---:|
-| Henry | 322.5 | 131 | 343 | 319 | 23 | +3.5 |
+| staff-d | 322.5 | 131 | 343 | 319 | 23 | +3.5 |
 | Omar | 114 | 47 | 119 | 111 | 7 | +3 |
-| Xmax | 52.5 | 24 | 71 | 67 | 3 | −14.5 |
-| Labeb | 34 | 18 | 39 | 29 | 9 | +5 |
+| staff-c | 52.5 | 24 | 71 | 67 | 3 | −14.5 |
+| staff-e | 34 | 18 | 39 | 29 | 9 | +5 |
 | Sheroo | 24.5 | 14 | 40 | 38 | 1 | −13.5 |
 | Heart | 20 | 10 | 20 | 19 | 0 | +1 |
 | Duilio | 0 | 0 | 3 | 0 | 2 | 0 |
 | Comment | 0 | 0 | 0 | 0 | 0 | 0 |
-| *(unlisted: miidoo. 2.5, n3k4a. 1)* | 3.5 | 2 | — | — | — | — |
+| *(unlisted: staff-a. 2.5, staff-b. 1)* | 3.5 | 2 | — | — | — | — |
 | **Total** | **571** | **246** | **635** | **583** | **45** | **−12** |
 
 The app total includes the 3.5 points from two staff members who are not in the manual table. The eight named staff total 567.5.
@@ -164,23 +164,23 @@ The app total includes the 3.5 points from two staff members who are not in the 
 
 | Staff | 17 Oct | 18 Oct | 19 Oct | 20 Oct | 21 Oct | 22 Oct | 23 Oct |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Xmax | 26.5 / 43 | **4 / 4** | **6 / 6** | **14 / 14** | 0 / 0 | 0 / 0 | 2 / 0 |
+| staff-c | 26.5 / 43 | **4 / 4** | **6 / 6** | **14 / 14** | 0 / 0 | 0 / 0 | 2 / 0 |
 | Omar | **26 / 26** | 13 / 11 | 11 / 9 | 7 / 6 | **5 / 5** | **44 / 44** | 8 / 10 |
-| Henry | 72 / 62 | 86 / 83 | 40.5 / 33 | 62 / 64 | 28.5 / 34 | **16 / 16** | 17.5 / 27 |
+| staff-d | 72 / 62 | 86 / 83 | 40.5 / 33 | 62 / 64 | 28.5 / 34 | **16 / 16** | 17.5 / 27 |
 | Sheroo | 1.5 / 16 | **4 / 4** | 0 / 0 | 0 / 0 | **11 / 11** | 8 / 7 | 0 / 0 |
-| Labeb | **7 / 7** | 11 / 8 | 12 / 8 | **1 / 1** | **3 / 3** | 0 / 0 | 0 / 2 |
+| staff-e | **7 / 7** | 11 / 8 | 12 / 8 | **1 / 1** | **3 / 3** | 0 / 0 | 0 / 2 |
 | Heart | **4 / 4** | 8 / 6 | **1 / 1** | **4 / 4** | 2 / 3 | 0 / 0 | **1 / 1** |
 | Duilio | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
 
-Bold cells are exact matches. Sixteen of the 49 named staff-days match exactly, including the whole 18–20 October run for Xmax. This is strong evidence that the activity basis is the right day grouping.
+Bold cells are exact matches. Sixteen of the 49 named staff-days match exactly, including the whole 18–20 October run for staff-c. This is strong evidence that the activity basis is the right day grouping.
 
 ### Remaining differences
 
-1. **The 17th is incomplete in the ID range.** Xmax is 16.5 below and Sheroo 14.5 below on 17 October, while Henry is 10 above. Tickets active on the 17th but opened before ID 7474 are not in the collected range. Widen the start ID (for example 7300) and re-sync to test that hypothesis. The dashboard rate limit may force several resumed runs for a range that large.
-2. **Classification differences remain.** Henry is +3, Labeb +5 and Heart +1 against the manual daily columns. Review their fallback/low-confidence tickets before treating these as app errors.
+1. **The 17th is incomplete in the ID range.** staff-c is 16.5 below and Sheroo 14.5 below on 17 October, while staff-d is 10 above. Tickets active on the 17th but opened before ID 7474 are not in the collected range. Widen the start ID (for example 7300) and re-sync to test that hypothesis. The dashboard rate limit may force several resumed runs for a range that large.
+2. **Classification differences remain.** staff-d is +3, staff-e +5 and Heart +1 against the manual daily columns. Review their fallback/low-confidence tickets before treating these as app errors.
 3. **The manual sheet is internally inconsistent.** Displayed sums are 635 but the daily columns plus donations total 628; Duilio’s displayed 3 cannot be produced by 0 daily + 2 donation. These are manual arithmetic differences, not awards the app can reproduce.
 4. **Donations are outside the taxonomy.** The app does not invent donation points. The 45 donation points are shown only for reconciliation.
-5. **Two unlisted staff** (`miidoo.` 2.5, `n3k4a.` 1) are real awards absent from the manual table.
+5. **Two unlisted staff** (`staff-a.` 2.5, `staff-b.` 1) are real awards absent from the manual table.
 6. **No ticket was modified.** Collection remains read-only.
 
 The machine-readable window summary is in `data/qa/window-17-23.json`.

@@ -67,7 +67,7 @@ Observed evidence:
 
 - The dashboard's own transcript list and render responses were read through the authenticated page. Each collected ticket has a stored transcript (for example 17 messages for #7770, 16 for #7778).
 - The first attempt exposed a nested SQLite transaction bug: the first ticket extracted successfully, then collection aborted on save. The transaction layer was fixed and a regression test added.
-- The dashboard sends `closed_by` as a JSON number above JavaScript's safe-integer limit. `JSON.parse` had rounded `752978053101256744` to `752978053101256700`, which made claimant/closer comparison fail. IDs are now parsed losslessly and the stored value is exact.
+- The dashboard sends `closed_by` as a JSON number above JavaScript's safe-integer limit. `JSON.parse` had rounded `example-staff-id` to `752978053101256700`, which made claimant/closer comparison fail. IDs are now parsed losslessly and the stored value is exact.
 - The transcript list has no claimant column. The collector reads the ticket's own **Claimed Ticket** control message and resolves the staff name from the transcript's user directory. All 8 live tickets show a confirmed claimant and closer.
 - #7778 (`تقديم اداره`) is a foreign staff-application reason. It is stored as the visible General problem fallback, not Recharge, and remains in Review.
 - After classifier 2.1.0 reassessment, #7773 (`general issues no respond`) is classified as **General Issue + No Response = 3 points**, but remains pending only because fuzzy matching was used. The old range totals **19 points**: `b932` 15 / 6 tickets, `_jr5` 2 / 1, `duilio_` 2 / 1.
@@ -101,7 +101,7 @@ The full comparison is in [BENCHMARK-7474-7747.md](BENCHMARK-7474-7747.md). In b
 - Mapped application total: **586.5**, which is **+3.5** against the supplied daily total.
 - The displayed total includes **45 donation points** that the application does not track and a **+7 manual sum error** (seven rows are +1 over their own columns).
 - Mapped application points + manual donations = **631.5**; adding the two unlisted staff (**3.5**) gives **635**.
-- Per-person gaps remain (Xmax −12.5, Sheroo −13.5, Henry +20.5, Labeb +7 against the daily columns), so the aggregate match is not evidence that every ticket was classified identically.
+- Per-person gaps remain (staff-c −12.5, Sheroo −13.5, staff-d +20.5, staff-e +7 against the daily columns), so the aggregate match is not evidence that every ticket was classified identically.
 
 ## Classifier 2.1.0 fixes
 

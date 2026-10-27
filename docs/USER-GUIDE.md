@@ -80,7 +80,7 @@ The report is bounded by the IDs in your local database, not by calendar dates. 
 curl -s "http://127.0.0.1:5178/api/staff?idStart=7474&idEnd=7747"
 
 # Same, one staff ID
-curl -s "http://127.0.0.1:5178/api/staff?idStart=7474&idEnd=7747&staff=752978053101256744"
+curl -s "http://127.0.0.1:5178/api/staff?idStart=7474&idEnd=7747&staff=example-staff-id"
 
 # Ticket list with the same range
 curl -s "http://127.0.0.1:5178/api/tickets?idStart=7474&idEnd=7747&pageSize=200"

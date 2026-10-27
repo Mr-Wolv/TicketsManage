@@ -94,11 +94,11 @@ The original manual figures are preserved unchanged. The sheet is internally inc
 
 | Person | Displayed | Daily columns | Daily total | Donation | Daily + donation | Displayed minus arithmetic |
 |---|---:|---:|---:|---:|---:|---:|
-| Xmax | 71 | 43+4+6+14+0+0+0 | 67 | 3 | 70 | +1 |
+| staff-c | 71 | 43+4+6+14+0+0+0 | 67 | 3 | 70 | +1 |
 | Omar | 119 | 26+11+9+6+5+44+10 | 111 | 7 | 118 | +1 |
-| Henry | 343 | 62+83+33+64+34+16+27 | 319 | 23 | 342 | +1 |
+| staff-d | 343 | 62+83+33+64+34+16+27 | 319 | 23 | 342 | +1 |
 | Sheroo | 40 | 16+4+0+0+11+7+0 | 38 | 1 | 39 | +1 |
-| Labeb | 39 | 7+8+8+1+3+0+2 | 29 | 9 | 38 | +1 |
+| staff-e | 39 | 7+8+8+1+3+0+2 | 29 | 9 | 38 | +1 |
 | Heart | 20 | 4+6+1+4+3+0+1 | 19 | 0 | 19 | +1 |
 | Comment | 0 | 0+0+0+0+0+0+0 | 0 | 0 | 0 | 0 |
 | Duilio | 3 | 0+0+0+0+0+0+0 | 0 | 2 | 2 | +1 |
@@ -116,15 +116,15 @@ Full activity window, including the 18 pre-7474 tickets:
 
 | Manual name | App staff | App points | App tickets | Manual daily | Manual displayed | vs daily | vs displayed |
 |---|---|---:|---:|---:|---:|---:|---:|
-| Henry | `b932` | **330.5** | 139 (135 credited) | 319 | 343 | **+11.5** | -12.5 |
+| staff-d | `b932` | **330.5** | 139 (135 credited) | 319 | 343 | **+11.5** | -12.5 |
 | Omar | `_jr5` | **114** | 49 (47 credited) | 111 | 119 | **+3** | -5 |
-| Xmax | `xmax5696` | **66.5** | 27 | 67 | 71 | **-0.5** | -4.5 |
+| staff-c | `xmax5696` | **66.5** | 27 | 67 | 71 | **-0.5** | -4.5 |
 | Sheroo | `4eroo` | **36** | 23 (22 credited) | 38 | 40 | **-2** | -4 |
-| Labeb | `ahmed_labeb` | **36** | 20 | 29 | 39 | **+7** | -3 |
+| staff-e | `ahmed_labeb` | **36** | 20 | 29 | 39 | **+7** | -3 |
 | Heart | `_k.in` | **20** | 11 (10 credited) | 19 | 20 | **+1** | 0 |
 | Duilio | `duilio_` | **0** | 3 (0 credited) | 0 | 3 | 0 | -3 |
 | Comment | — | 0 | 0 | 0 | 0 | 0 | 0 |
-| *(unlisted)* | miidoo. / n3k4a. | **3.5** | 2 | — | — | — | — |
+| *(unlisted)* | staff-a. / staff-b. | **3.5** | 2 | — | — | — | — |
 | **Total** | | **606.5** | 275 in window | **583** | **635** | **+23.5** | **-28.5** |
 
 App mapped total is **603**; adding the two unlisted staff gives **606.5**.
@@ -135,26 +135,26 @@ The difference between the earlier result and this one is exactly the coverage e
 
 | Staff | Original 7474–7747 | Pre-7474 tickets added | Full window | Diff vs manual daily, original | Diff vs manual daily, full |
 |---|---:|---:|---:|---:|---:|
-| Henry | 322.5 | **+8** | 330.5 | +3.5 | +11.5 |
+| staff-d | 322.5 | **+8** | 330.5 | +3.5 | +11.5 |
 | Omar | 114 | 0 | 114 | +3 | +3 |
-| Xmax | 52.5 | **+14** | 66.5 | -14.5 | **-0.5** |
+| staff-c | 52.5 | **+14** | 66.5 | -14.5 | **-0.5** |
 | Sheroo | 24.5 | **+11.5** | 36 | -13.5 | **-2** |
-| Labeb | 34 | +2 | 36 | +5 | +7 |
+| staff-e | 34 | +2 | 36 | +5 | +7 |
 | Heart | 20 | 0 | 20 | +1 | +1 |
 | Duilio | 0 | 0 | 0 | 0 | 0 |
 | **Mapped total** | **567.5** | **+35.5** | **603** | **-15.5** | **+20** |
 
-The extension clearly fixes **Xmax** (now 0.5 low) and **Sheroo** (now 2 low). It pushes **Henry** from +3.5 to +11.5.
+The extension clearly fixes **staff-c** (now 0.5 low) and **Sheroo** (now 2 low). It pushes **staff-d** from +3.5 to +11.5.
 
-Henry's bridge is exactly four tickets: **#7436, #7444, #7446, #7464** (2 points each). If the manual Henry row covers only IDs 7474–7747, it would exclude those four, and 330.5 − 8 = **322.5**, only **+3.5** versus 319. That is a scope difference, not a scoring change.
+staff-d's bridge is exactly four tickets: **#7436, #7444, #7446, #7464** (2 points each). If the manual staff-d row covers only IDs 7474–7747, it would exclude those four, and 330.5 − 8 = **322.5**, only **+3.5** versus 319. That is a scope difference, not a scoring change.
 
-Labeb's bridge is only **#7458 and #7459** (1 point each). His +7 is therefore **not** explained by the extension; +5 remains even in the original range and needs ticket-level checking against the sheet.
+staff-e's bridge is only **#7458 and #7459** (1 point each). His +7 is therefore **not** explained by the extension; +5 remains even in the original range and needs ticket-level checking against the sheet.
 
 ### What the remaining differences mean
 
-- **Xmax -0.5, Sheroo -2, Heart +1, Omar +3** are within one or two tickets. They are plausible day-boundary, claimant-credit, or sheet-rounding differences.
-- **Henry +11.5** is mostly the four pre-7474 tickets. Confirm whether those IDs are in the Henry sheet.
-- **Labeb +7** is the main unexplained positive difference. His 20 tickets are all straightforward General Issue/Report/No Response awards with rule B; the sheet's Labeb row is either missing tickets or using a different attribution.
+- **staff-c -0.5, Sheroo -2, Heart +1, Omar +3** are within one or two tickets. They are plausible day-boundary, claimant-credit, or sheet-rounding differences.
+- **staff-d +11.5** is mostly the four pre-7474 tickets. Confirm whether those IDs are in the staff-d sheet.
+- **staff-e +7** is the main unexplained positive difference. His 20 tickets are all straightforward General Issue/Report/No Response awards with rule B; the sheet's staff-e row is either missing tickets or using a different attribution.
 - **Duilio** has 3 zero-credit tickets (2 different claimant/closer, 1 cancellation) and 0 ticket points. His manual 3 is donation-only, so 0 is correct for ticket points.
 - **Unresolved attribution** is limited to 2 tickets worth 4 base points (#7622 automatic closure with no identities, #7742 missing claimant). They are not silently awarded.
 
@@ -221,15 +221,15 @@ Only `collection_runs` and `collection_items` grew, which is expected audit hist
 | Semantic runtime | **PASS** | Ollama/model self-test and 3 live reasons |
 | Semantic live scoring | **INTENTIONALLY OFF** | Deterministic classifier; fallback + review instead of model guess |
 | Manager-approved semantic sample | **BLOCKED** | Requires manager labels |
-| Per-staff reconciliation | **PARTIAL** | 18-ticket bridge isolated; manual scope ambiguity for Henry; Labeb +7 unresolved |
+| Per-staff reconciliation | **PARTIAL** | 18-ticket bridge isolated; manual scope ambiguity for staff-d; staff-e +7 unresolved |
 | Manual sheet internal consistency | **FAIL (SOURCE DATA)** | Displayed 635 vs daily+donation 628; every row +1 |
 | Ticket-level drill-down | **PASS** | 275-row CSV + variance JSON |
 | No live ticket mutation | **PASS** | Read-only collection; no Discord actions |
 
 ## 10. Remaining blockers and precise next actions
 
-1. **Henry scope question.** Confirm whether #7436, #7444, #7446, #7464 are in the manual Henry row. If not, the correct comparison is 322.5 vs 319 (+3.5), not 330.5 vs 319.
-2. **Labeb +7.** Compare his 20 ticket IDs in the CSV against the sheet. The app's awards are all rule B and no fallbacks, so this is likely an omission or a manual attribution difference.
+1. **staff-d scope question.** Confirm whether #7436, #7444, #7446, #7464 are in the manual staff-d row. If not, the correct comparison is 322.5 vs 319 (+3.5), not 330.5 vs 319.
+2. **staff-e +7.** Compare his 20 ticket IDs in the CSV against the sheet. The app's awards are all rule B and no fallbacks, so this is likely an omission or a manual attribution difference.
 3. **Manual arithmetic.** Use the daily columns (583), not displayed sums (635), when comparing ticket points. The +7 is arithmetic, not scoring. Donations (45) are outside the taxonomy.
 4. **Review queue.** 68 non-demo pending reviews exist; 38 are in this window. These are visible, not hidden. Resolve the high-value/fallback ones before treating the total as final.
 5. **Full refresh.** Cannot meet five minutes under the observed dashboard budget. Use Sync for repeats; Full refresh is a rare audit operation and should be resumed after cooldowns.

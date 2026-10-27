@@ -70,7 +70,7 @@ The dashboard transcript list exposes ticket ID, opener, closing reason, closing
 | SQLite | `data/ticketsmanage.db`, schema version 1 |
 | Dashboard profile | `data/browser-profile` |
 | Authentication | Authenticated; verification took 2.455 s, then 2.677 s after a full browser close |
-| Dashboard response | HTTP 200 from `https://api.tickets.bot/api/1276839639285760081/transcripts` |
+| Dashboard response | HTTP 200 from `https://api.tickets.bot/api/example-guild-id/transcripts` |
 | Backup | `data/backups/ticketsmanage-2026-10-24T20-50-08.db`, 184,320 bytes, counts matched live |
 | Independent browser check | Source ticket #7778 loaded at HTTP 200 using the saved profile |
 
@@ -78,7 +78,7 @@ The independent capture contained 15 dashboard rows. The eight stored tickets ma
 
 - opener username;
 - original closing reason;
-- closing staff Discord ID (parsed without rounding, e.g. `752978053101256744`);
+- closing staff Discord ID (parsed without rounding, e.g. `example-staff-id`);
 - transcript availability;
 - rating.
 
