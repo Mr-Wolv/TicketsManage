@@ -71,7 +71,8 @@ export class OpenAiCompatibleProvider implements CloudSemanticProvider {
     const systemPrompt = `You are a support ticket classifier. Return JSON only matching the schema. ${taxonomyContext}`;
 
     try {
-      const response = await fetch(`${this.providerUrl}/v1/chat/completions`, {
+      const baseUrl = this.providerUrl.replace(/\/+$/, '').replace(/\/v1\/?$/, '');
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

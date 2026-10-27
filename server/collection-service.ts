@@ -325,6 +325,7 @@ export class CollectionService {
       this.saveDiagnostics(active, diagnostics);
       const stats = this.refreshStats(active);
       this.finish(active, stats.failed > 0 ? 'completed_with_errors' : 'completed', 'finished');
+      void this.runCloudReviewAfterCollection();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.db.updateRun(active.record.id, {
@@ -969,6 +970,7 @@ export class CollectionService {
     this.saveDiagnostics(active, diagnostics);
     const stats = this.refreshStats(active);
     this.finish(active, stats.failed > 0 ? 'completed_with_errors' : 'completed', 'finished');
+    void this.runCloudReviewAfterCollection();
   }
 
   private async interruptibleDelay(active: ActiveRun, ms: number): Promise<void> {
@@ -1056,6 +1058,25 @@ export class CollectionService {
       processed: active.record.processed,
     });
     this.active = null;
+  }
+
+  private async runCloudReviewAfterCollection(): Promise<void> {
+    try {
+      const settings = this.db.getSettings();
+      if (!settings.cloudProviderUrl || !settings.cloudApiKey || !settings.cloudModel) {
+        return;
+      }
+      const result = await this.assessments.reclassifyPendingReviewsWithCloud();
+      log('info', 'collection.cloud_review_complete', {
+        processed: result.processed,
+        updated: result.updated,
+        failed: result.failed,
+      });
+    } catch (error) {
+      log('warn', 'collection.cloud_review_failed', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+    }
   }
 }
 

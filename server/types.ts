@@ -31,6 +31,7 @@ export type ClassificationMethod =
   | 'fuzzy'
   | 'semantic'
   | 'hybrid'
+  | 'cloud'
   | 'rules_only'
   | 'human'
   | 'fallback'

@@ -5,7 +5,6 @@ import { normalizeReason } from './classifier/normalize.js';
 import { classifyReason } from './classifier/pipeline.js';
 import { isCategoryId, loadUnifiedTaxonomy, pointsFor } from './classifier/taxonomy.js';
 import { applyStaffCredit, basePointsFor } from './scoring.js';
-import { OllamaClient } from './classifier/ollama.js';
 import { OpenAiCompatibleProvider, adaptCloudResult, buildTaxonomyContext } from './classifier/cloud.js';
 import type {
   CategoryAssessment,
@@ -96,70 +95,19 @@ export class AssessmentService {
     }
 
     const settings = this.db.getSettings();
-    const aiMode = settings.aiMode ?? 'deterministic';
-    const useModel = aiMode === 'production' && settings.semanticEnabled;
-    const useShadow = aiMode === 'shadow' && settings.semanticEnabled;
-    let semanticFn: ((reason: string) => Promise<any>) | undefined;
-    if (useModel || useShadow) {
-      try {
-        if (settings.cloudProviderUrl && settings.cloudApiKey && settings.cloudModel) {
-          const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
-          const taxonomyContext = buildTaxonomyContext(
-            Object.values(loadUnifiedTaxonomy(this.db)).map((category) => ({
-              id: category.id,
-              code: category.code,
-              label: category.label,
-              examples: category.examples,
-            })),
-          );
-          semanticFn = async (reason: string) => {
-            const result = await provider.classify(reason, taxonomyContext, settings.cloudTimeoutMs);
-            return adaptCloudResult(result) as any;
-          };
-        } else {
-          const client = new OllamaClient(settings.ollamaUrl, settings.model);
-          semanticFn = (reason: string) => client.classifyReason(reason, settings.modelTimeoutMs);
-        }
-      } catch (error) {
-        log('warn', 'assessment.model_init_failed', {
-          ticketId,
-          error: error instanceof Error ? error.message : 'unknown',
-        });
-      }
-    }
-    // Live classification uses deterministic rules by default; AI can be enabled
-    // in shadow or production modes with safeguards.
     const classification = await classifyReason(
       ticket.closeReason ?? '',
       ticket.closeReasonState,
       {
         fuzzyThreshold: settings.fuzzyThreshold,
-        semanticEnabled: useModel && Boolean(semanticFn),
-        semanticMode: useModel && semanticFn ? 'always' : 'off',
-        model: useModel && semanticFn ? settings.model : null,
+        semanticEnabled: false,
+        semanticMode: 'off',
+        model: null,
         aliasLookup: (normalized) => this.db.findApprovedAlias(normalized),
-        suppressSemanticDisabledReview: aiMode !== 'shadow',
-        semantic: semanticFn,
+        suppressSemanticDisabledReview: true,
         db: this.db,
       },
     );
-    if (useShadow && semanticFn) {
-      try {
-        const shadow = await semanticFn(ticket.closeReason ?? '');
-        log('info', 'assessment.shadow_prediction', {
-          ticketId,
-          model: shadow.model,
-          latencyMs: shadow.latencyMs,
-          categories: shadow.categories.map((c: any) => c.categoryId),
-          reviewRequired: shadow.reviewRequired,
-        });
-      } catch (error) {
-        log('warn', 'assessment.shadow_failed', {
-          ticketId,
-          error: error instanceof Error ? error.message : 'unknown',
-        });
-      }
-    }
 
     const assessment = this.buildStoredAssessment({
       ticket,
@@ -505,6 +453,110 @@ export class AssessmentService {
       }
     }
     return { reclassified, failed };
+  }
+
+  async reclassifyPendingReviewsWithCloud(): Promise<{ processed: number; updated: number; failed: number }> {
+    const settings = this.db.getSettings();
+    if (!settings.cloudProviderUrl || !settings.cloudApiKey || !settings.cloudModel) {
+      throw new Error('Cloud provider is not configured.');
+    }
+
+    const provider = new OpenAiCompatibleProvider(settings.cloudProviderUrl, settings.cloudApiKey, settings.cloudModel);
+    const taxonomyContext = buildTaxonomyContext(
+      Object.values(loadUnifiedTaxonomy(this.db)).map((category) => ({
+        id: category.id,
+        code: category.code,
+        label: category.label,
+        examples: category.examples,
+      })),
+    );
+
+    const pending = this.db.listReviews('pending');
+    let processed = 0;
+    let updated = 0;
+    let failed = 0;
+
+    for (const entry of pending) {
+      const ticket = entry.ticket;
+      const assessment = entry.assessment;
+      if (!ticket || !assessment || assessment.humanCorrected) {
+        continue;
+      }
+
+      processed += 1;
+      try {
+        const result = await provider.classify(
+          ticket.closeReason ?? '',
+          taxonomyContext,
+          settings.cloudTimeoutMs,
+        );
+        const adapted = adaptCloudResult(result) as any;
+        const categories = (adapted.categories ?? []).map((c: any) => ({
+          categoryId: c.categoryId,
+          points: pointsFor(c.categoryId, this.db),
+          evidence: c.evidence ?? [],
+          method: 'cloud' as const,
+          confidence: c.confidence ?? 0,
+        }));
+
+        if (categories.length === 0) {
+          throw new Error('Cloud model returned no categories.');
+        }
+
+        const basePoints = basePointsFor(categories, this.db);
+        const credit = applyStaffCredit(
+          {
+            claimedState: ticket.claimedState,
+            claimedById: ticket.claimedById,
+            claimedByName: ticket.claimedByName,
+            closedState: ticket.closedState,
+            closedById: ticket.closedById,
+            closedByName: ticket.closedByName,
+            reasonState: ticket.closeReasonState,
+          },
+          basePoints,
+        );
+
+        const reviewReasons = [...new Set(assessment.reviewReasons ?? [])];
+        const newAssessment = this.buildStoredAssessment({
+          ticket,
+          categories,
+          fallback: assessment.fallback,
+          method: 'cloud',
+          confidence: categories[0]?.confidence ?? 0,
+          explanation: (adapted.explanation as string) ?? 'Cloud semantic reclassification.',
+          alternatives: (adapted.alternatives as any[]) ?? [],
+          classificationReviewReasons: reviewReasons,
+          unresolvedPortion: (adapted.unresolvedPortion as string | null) ?? null,
+          model: result.model,
+          humanCorrected: false,
+        });
+
+        this.db.transaction(() => {
+          this.db.saveAssessment(newAssessment);
+          if (reviewReasons.length === 0) {
+            this.db.setReviewReasons(assessment.ticketId, []);
+          }
+          this.db.addReviewHistory(
+            assessment.ticketId,
+            'reassessed',
+            assessment.categories.map((c: { categoryId: string }) => c.categoryId),
+            categories.map((c: { categoryId: string }) => c.categoryId),
+            'Cloud AI reclassification.',
+          );
+        });
+
+        updated += 1;
+      } catch (error) {
+        failed += 1;
+        log('warn', 'assessment.cloud_review_failed', {
+          ticketId: ticket.ticketId,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+      }
+    }
+
+    return { processed, updated, failed };
   }
 
   listPendingAssessmentIds(limit = 100, includeDemo = false): string[] {

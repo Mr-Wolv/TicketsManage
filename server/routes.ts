@@ -734,6 +734,20 @@ export function createApiRouter(deps: {
     }),
   );
 
+  router.post(
+    '/assessments/cloud-reclassify',
+    asyncRoute(async (_req, res) => {
+      const result = await assessments.reclassifyPendingReviewsWithCloud();
+      res.json({
+        ...result,
+        message:
+          `Cloud AI processed ${result.processed.toLocaleString()} review-worthy ticket(s): ` +
+          `${result.updated.toLocaleString()} updated, ${result.failed.toLocaleString()} failed. ` +
+          `Remaining failures stay in the review queue.`,
+      });
+    }),
+  );
+
   // ---- reviews ----------------------------------------------------------
 
   router.get('/reviews', (req, res) => {
