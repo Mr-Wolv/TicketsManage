@@ -476,14 +476,15 @@ export class AssessmentService {
     let updated = 0;
     let failed = 0;
 
-    for (const entry of pending) {
+    const workers = Math.max(1, Math.min(12, settings.cloudTimeoutMs > 0 ? Math.ceil(60000 / settings.cloudTimeoutMs) : 6));
+
+    const processOne = async (entry: typeof pending[number]): Promise<{ updated: number; failed: number }> => {
       const ticket = entry.ticket;
       const assessment = entry.assessment;
       if (!ticket || !assessment || assessment.humanCorrected) {
-        continue;
+        return { updated: 0, failed: 0 };
       }
 
-      processed += 1;
       try {
         const result = await provider.classify(
           ticket.closeReason ?? '',
@@ -546,13 +547,49 @@ export class AssessmentService {
           );
         });
 
-        updated += 1;
+        return { updated: 1, failed: 0 };
       } catch (error) {
-        failed += 1;
         log('warn', 'assessment.cloud_review_failed', {
           ticketId: ticket.ticketId,
           error: error instanceof Error ? error.message : 'unknown',
         });
+        return { updated: 0, failed: 1 };
+      }
+    };
+
+    const eligible = pending.filter((entry) => {
+      const ticket = entry.ticket;
+      const assessment = entry.assessment;
+      return !!ticket && !!assessment && !assessment.humanCorrected;
+    });
+    processed = eligible.length;
+
+    const pool: Promise<{ updated: number; failed: number }>[] = [];
+    for (const entry of eligible) {
+      const task = processOne(entry);
+      pool.push(task);
+      if (pool.length >= workers) {
+        const settled = await Promise.allSettled(pool);
+        for (const result of settled) {
+          if (result.status === 'fulfilled') {
+            updated += result.value.updated;
+            failed += result.value.failed;
+          } else {
+            failed += 1;
+          }
+        }
+        pool.length = 0;
+      }
+    }
+    if (pool.length > 0) {
+      const settled = await Promise.allSettled(pool);
+      for (const result of settled) {
+        if (result.status === 'fulfilled') {
+          updated += result.value.updated;
+          failed += result.value.failed;
+        } else {
+          failed += 1;
+        }
       }
     }
 
