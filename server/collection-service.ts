@@ -468,12 +468,16 @@ export class CollectionService {
       await this.loop(active);
     } catch (error) {
       const message = describeExtractionError(error);
-      this.db.updateRun(active.record.id, {
-        status: 'paused',
-        stage: 'paused',
-        errorCode: 'FATAL_RUN_ERROR',
-        errorMessage: message,
-      });
+      try {
+        this.db.updateRun(active.record.id, {
+          status: 'paused',
+          stage: 'paused',
+          errorCode: 'FATAL_RUN_ERROR',
+          errorMessage: message,
+        });
+      } catch {
+        // Database may already be closed (e.g., during test teardown). Ignore.
+      }
       active.record.status = 'paused';
       active.record.stage = 'paused';
       active.record.errorCode = 'FATAL_RUN_ERROR';
