@@ -650,9 +650,6 @@ export function createApiRouter(deps: {
       reviewStatus: typeof req.query.reviewStatus === 'string' ? req.query.reviewStatus : undefined,
       collectionStatus:
         typeof req.query.status === 'string' ? req.query.status : undefined,
-      from: normalizeDateFilter(req.query.from, false),
-      to: normalizeDateFilter(req.query.to, true),
-      dateBasis: req.query.dateBasis === 'activity' ? 'activity' : 'opened',
       includeDemo: demo === '1' || demo === 'include',
       demoOnly: demo === 'only',
       sort: (req.query.sort as 'id' | 'collected' | 'base' | 'awarded' | 'reason') ?? 'id',
