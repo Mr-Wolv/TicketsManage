@@ -568,11 +568,16 @@ export class AssessmentService {
             resultCache.set(reasonHash, { categories, alternatives, reviewRequired });
           }
         } catch (error) {
-          const typed = error as Error & { quotaExhausted?: boolean; cause?: string };
+          const typed = error as Error & { quotaExhausted?: boolean; cause?: string; status?: number };
           if (typed.quotaExhausted) {
             quotaExhausted = true;
             quotaReason = typed.cause ?? 'Daily free-model quota exhausted.';
           }
+          log('warn', 'cloud.classify_failed', {
+            ticketId: ticket.ticketId,
+            message: (typed.message ?? String(error)).slice(0, 300),
+            status: typed.status ?? null,
+          });
           return false;
         }
       }
