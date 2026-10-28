@@ -1,5 +1,7 @@
 # TicketsManage — Architecture Planning, Cloud Semantic Classification, Taxonomy Consolidation, Functional Audit & Security Review
 
+> **Status: Historical / superseded.** This document describes an earlier desired state and must not be treated as current requirements. See the current README for authoritative behavior. Do not silently rewrite this historical account.
+
 **Mode: `/plan` — investigation and implementation plan only. No code changes, no resets, no migrations in this pass.**
 
 ---

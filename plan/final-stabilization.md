@@ -1,5 +1,7 @@
 # TicketsManage Final Stabilization — Execution Plan
 
+> **Status: Historical / superseded.** This document describes an earlier desired state and must not be treated as current requirements. See the current README and `plan/stewardship-plan.md` (if present) for authoritative behavior. Do not silently rewrite this historical account.
+
 ## Current State
 - App v2.0.0, 111 tests passing, launcher working
 - Roster: 456 tickets, 917 awarded points, 68 reviews
